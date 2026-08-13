@@ -60,6 +60,8 @@ class ExpConfig(BaseModel):
     post_publish_dwell: NonNegativeInt = 90
     max_connections: NonNegativeInt = 250
     """Per-node connection cap."""
+    rollout_timeout_s: NonNegativeInt = 3600
+    """How long to wait for every node to report ready."""
     max_failed_publishes: NonNegativeInt = 0
     """Publishes that may fail before the run is treated as invalid."""
     publish_rate_tolerance: NonNegativeFloat = 0.1
@@ -273,7 +275,11 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
         name = nodes.metadata.name
         namespace = nodes.metadata.namespace
 
-        await self.deploy(deployment=nodes, wait_for_ready=self.config.wait_nodes_ready)
+        await self.deploy(
+            deployment=nodes,
+            wait_for_ready=self.config.wait_nodes_ready,
+            timeout=self.config.rollout_timeout_s,
+        )
 
         await self._after_nodes(nodes)
 
