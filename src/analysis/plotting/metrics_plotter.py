@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from typing import Dict, List
 
 import matplotlib.pyplot as plt
@@ -69,6 +70,13 @@ class MetricsPlotter(BaseModel):
             plot_specs_dict = plot_specs.model_dump()
             self._add_subplot_df_to_axs(metric_df, i, axs, plot_specs_dict, metric)
 
+    @staticmethod
+    def _metric_file(folder: Path, file_name: str) -> Path:
+        """A scrape's file, which newer scrapes write with a .csv suffix and older ones without."""
+        path = folder / file_name
+        suffixed = folder / f"{file_name}.csv"
+        return suffixed if not path.exists() and suffixed.exists() else path
+
     def _named_files_for_metric(
         self, plot_specs: PlotConfig, data_paths: List[DataPath], metric: str
     ) -> List[DataPath]:
@@ -83,13 +91,13 @@ class MetricsPlotter(BaseModel):
             if data_path.file_name:
                 if data_path.file_name not in plot_specs.include_files:
                     continue
-                path = data_path.path / metric / data_path.file_name
+                path = self._metric_file(data_path.path / metric, data_path.file_name)
                 if path.exists():
                     named_files.append(DataPath(name=data_path.name, path=path))
                 continue
 
             for file_name in plot_specs.include_files:
-                path = data_path.path / metric / file_name
+                path = self._metric_file(data_path.path / metric, file_name)
                 if path.exists():
                     name = (
                         data_path.name
