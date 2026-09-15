@@ -244,7 +244,12 @@ class WakuAnalyzer(Nimlibp2pAnalyzer):
         out_dir = self._dump_analysis_path / "latency"
         written = write_delivery_latency(paths, out_dir)
         LatencyPlotter(
-            configs=[LatencyPlotConfig(name="delivery_latency", runs=written, out_dir=out_dir)]
+            configs=[
+                LatencyPlotConfig(name="delivery_latency", runs=written, out_dir=out_dir),
+                LatencyPlotConfig(
+                    name="delivery_latency_box", kind="box", runs=written, out_dir=out_dir
+                ),
+            ]
         ).create_plots()
         table = latency_table(written, percentiles=(50, 90, 99))
         logger.info(f"Delivery latency (ms):\n{table.to_string()}")
