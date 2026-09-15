@@ -185,6 +185,18 @@ def get_full_logos_delivery_analyzer(metadata) -> Analyzer:
             expected_num_messages=params["num_messages"],
         )
         .with_store_archive_check(folder=Path(out_folder) / "store_messages")
+        .with_delivery_latency_check(
+            lightpush_sets=[
+                pair
+                for pair in zip(stateful_sets, nodes_per_statefulset)
+                if pair[0].startswith("lpserver")
+            ],
+            filter_sets=[
+                pair
+                for pair in zip(stateful_sets, nodes_per_statefulset)
+                if pair[0].startswith("fclient")
+            ],
+        )
         .with_dump_analysis_dir(f"{out_folder}/analysis/")
     )
 

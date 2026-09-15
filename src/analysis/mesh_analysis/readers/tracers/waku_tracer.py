@@ -52,6 +52,38 @@ class WakuTracer(MessageTracer):
         )
         return self
 
+    def with_lightpush_handled_pattern_group(self) -> Self:
+        """Service node handling a lightpush request: when the message entered the network."""
+        self.patterns.append(
+            PatternGroup(
+                "lightpush_handled",
+                trace_pairs=[
+                    TracePair(
+                        regex=r"[Hh]andling lightpush request.*?my_peer_id=([\w*]+).*?peer_id=([\w*]+).*?msg_hash=(0x[\da-f]+).*?receivedTime=(\d+)",
+                        convert=self._trace_lightpush_in_logs,
+                    ),
+                ],
+                query='i("handling lightpush request")',
+            )
+        )
+        return self
+
+    def with_filter_received_pattern_group(self) -> Self:
+        """Edge node receiving a filter push from its service node."""
+        self.patterns.append(
+            PatternGroup(
+                "filter_received",
+                trace_pairs=[
+                    TracePair(
+                        regex=r"Received message push.*?peerId[\s\":=]+([\w*]+).*?msg_hash[\s\":=]+(0x[\da-f]+).*?receivedTime[\s\":=]+(\d+)",
+                        convert=self._trace_filter_received_in_logs,
+                    ),
+                ],
+                query='i("received message push")',
+            )
+        )
+        return self
+
     def with_sent_pattern_group(self) -> Self:
         sent_pattern_group = PatternGroup(
             name="sent",
@@ -87,6 +119,13 @@ class WakuTracer(MessageTracer):
 
     def _trace_mixnet_in_logs(self, parsed_logs: List) -> pd.DataFrame:
         columns = ["sender_peer_id", "receiver_peer_id", "msg_hash", "timestamp"]
+        columns.extend(self.extra_fields)
+
+        df = self._create_dataframe_with_timestamp(parsed_logs, columns)
+        return df
+
+    def _trace_filter_received_in_logs(self, parsed_logs: List) -> pd.DataFrame:
+        columns = ["sender_peer_id", "msg_hash", "timestamp"]
         columns.extend(self.extra_fields)
 
         df = self._create_dataframe_with_timestamp(parsed_logs, columns)
