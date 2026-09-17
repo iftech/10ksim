@@ -223,6 +223,8 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     post_run_analysis: ClassVar[str] = "src.analysis.post_run.nimlibp2p:run_nimlibp2p_analysis"
+    bootstrap_after_nodes: ClassVar[bool] = False
+    """Deploy the anchor after `_after_nodes`, so no node can discover peers before it."""
 
     def _get_metadata(self) -> dict:
         return Bridge().get_metadata(self.events_log_path)
@@ -230,13 +232,25 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
     async def _after_nodes(self, nodes: V1StatefulSet) -> None:
         """Runs once the nodes are up, before the cold start they form the mesh during.
 
-        Scenarios override this to shape the network the mesh will form over. Nodes hold
-        off dialling for `node_start_delay`, so anything done here lands before they
-        connect, provided that delay outlasts the deploy.
+        Scenarios override this to shape the network the mesh will form over. Nodes dial
+        as soon as they start, so a scenario that must act first sets `bootstrap_after_nodes`.
         """
 
     async def _mid_run(self, nodes: V1StatefulSet) -> None:
         """Runs alongside the publish loop. Scenarios override this to disturb the network."""
+
+    async def _deploy_bootstrap(self) -> None:
+        """Anchor node and headless discovery service (kad-dht only)."""
+        if self.config.discovery != "kad-dht":
+            return
+        bootstrap_service = build_bootstrap_service(self.namespace)
+        self.dump_yaml(bootstrap_service, "bootstrap-service")
+        await self.deploy(deployment=bootstrap_service)
+
+        bootstrap = build_bootstrap_nodes(namespace=self.namespace, params=self.config)
+        self.dump_yaml(bootstrap, "bootstrap")
+        await self.deploy(deployment=bootstrap, wait_for_ready=True)
+        self.log_event("bootstrap_deployed")
 
     def _publishable_nodes(self) -> int:
         """How many of the relays the publisher may target, counted from index 0."""
@@ -256,16 +270,8 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
         self.dump_yaml(node_service, "nimp2p-service")
         await self.deploy(deployment=node_service, exist_ok=True)
 
-        # Bootstrap (kad-dht only): anchor node + headless discovery service. Deployed
-        # before the nodes so the mesh can form through it once the nodes wake up.
-        if self.config.discovery == "kad-dht":
-            bootstrap_service = build_bootstrap_service(self.namespace)
-            self.dump_yaml(bootstrap_service, "bootstrap-service")
-            await self.deploy(deployment=bootstrap_service)
-
-            bootstrap = build_bootstrap_nodes(namespace=self.namespace, params=self.config)
-            self.dump_yaml(bootstrap, "bootstrap")
-            await self.deploy(deployment=bootstrap, wait_for_ready=True)
+        if not self.bootstrap_after_nodes:
+            await self._deploy_bootstrap()
 
         # Nodes
         nodes = build_nodes(
@@ -282,6 +288,8 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
         )
 
         await self._after_nodes(nodes)
+        if self.bootstrap_after_nodes:
+            await self._deploy_bootstrap()
 
         await asyncio.sleep(self.config.delay_cold_start)
 
