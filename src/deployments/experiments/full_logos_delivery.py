@@ -1,10 +1,13 @@
 import asyncio
 import json
 import logging
+import os
 import random
 import time
 import traceback
+from pathlib import Path
 from typing import Dict, List, Literal
+from urllib.parse import urlencode
 
 from kubernetes.client import V1ServicePort
 from pydantic import BaseModel, ConfigDict, Field, NonNegativeFloat, NonNegativeInt
@@ -33,6 +36,7 @@ LogLevel = Literal["INFO", "DEBUG", "TRACE"]
 Protocol = Literal["relay", "lightpush"]
 
 WAKU_REST_PORT = 8645
+STORE_PAGE_SIZE = 100
 FILTER_SUBSCRIBE_BATCH = 50
 FILTER_PING_INTERVAL_S = 120
 """Well inside the filter server's 5 minute subscription lifetime, so a slow round still fits."""
@@ -186,6 +190,39 @@ def build_nodes(namespace: str, config: ExpConfig) -> Dict[str, V1Deployable]:
     }
 
 
+async def store_message_hashes(
+    namespace: str,
+    pod_name: str,
+    content_topic: str,
+    topic: str,
+    page_size: int = STORE_PAGE_SIZE,
+) -> List[str]:
+    """Message hashes one store node holds, following the pagination cursor."""
+    hashes: List[str] = []
+    cursor = ""
+    while True:
+        params = {"contentTopics": content_topic, "pubsubTopic": topic, "pageSize": page_size}
+        if cursor:
+            params["cursor"] = cursor
+        url = f"http://127.0.0.1:{WAKU_REST_PORT}/store/v3/messages?{urlencode(params)}"
+        command = exec_command_in_pod(
+            namespace,
+            pod_name,
+            ["/bin/sh", "-c", f"curl -s -H 'accept: application/json' '{url}'"],
+            container=WAKU_CONTAINER_NAME,
+        )
+        await command.collect_output_async()
+        if not command.ok:
+            raise RuntimeError(f"Store query failed on `{pod_name}`: `{command.output}`")
+
+        page = json.loads(command.output)
+        messages = page.get("messages") or []
+        hashes.extend(message["messageHash"] for message in messages)
+        cursor = page.get("paginationCursor")
+        if not messages or not cursor:
+            return hashes
+
+
 async def _filter_rest_call(namespace: str, pod_name: str, curl_args: str, action: str):
     """Run one filter REST call inside an edge node and require an OK status."""
     # The exec handshake blocks, and this runs alongside the publish loop.
@@ -270,6 +307,28 @@ class FullLogosDeliveryExperiment(BaseExperiment[ExpConfig]):
     def log_event(self, event):
         logger.info(event)
         return super().log_event(event)
+
+    def dump(self, obj, file_name):
+        out_path = Path(self.output_folder) / file_name
+        os.makedirs(out_path.parent, exist_ok=True)
+        with open(out_path, "w") as out_file:
+            out_file.write(obj)
+
+    async def dump_store_messages(self, topic: str):
+        """Read each store node's archive separately, so one empty node is visible."""
+        if self.dry_run:
+            return
+        for index in range(0, self.config.num_store_nodes):
+            pod_name = f"store-0-{index}"
+            try:
+                hashes = await store_message_hashes(
+                    self.namespace, pod_name, self.config.content_topic, topic
+                )
+            except Exception as e:
+                logger.error(f"Failed to read the archive of `{pod_name}`: {e}")
+                continue
+            self.dump(json.dumps(hashes), Path("store_messages") / f"{pod_name}.json")
+            self.log_event({"event": "store_archive", "node": pod_name, "messages": len(hashes)})
 
     async def _each_filter_client(self, action, *args) -> int:
         """Run `action` on every filter client in batches, returning how many succeeded."""
@@ -401,5 +460,7 @@ class FullLogosDeliveryExperiment(BaseExperiment[ExpConfig]):
         await pings
 
         await asyncio.sleep(self.config.post_publish_dwell)
+
+        await self.dump_store_messages(pubsub_topic(cluster_id))
 
         self.log_event("internal_run_finished")
