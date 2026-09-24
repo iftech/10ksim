@@ -1,6 +1,8 @@
 import asyncio
+import json
 import logging
 import random
+import time
 import traceback
 from typing import Dict, List, Literal
 
@@ -9,18 +11,21 @@ from pydantic import BaseModel, ConfigDict, Field, NonNegativeFloat, NonNegative
 
 from src.deployments.core.builders import ServiceBuilder
 from src.deployments.core.configs.container import Image
+from src.deployments.core.pod_interaction import exec_command_in_pod
 from src.deployments.experiments.base_experiment import BaseExperiment, V1Deployable
 from src.deployments.pod_api_requester.builder import PodApiRequesterBuilder
 from src.deployments.pod_api_requester.configs import Target
 from src.deployments.pod_api_requester.pod_api_requester import PodApiApplicationError, PodApiError
 from src.deployments.pod_api_requester.waku import (
     DEFAULT_CONTENT_TOPIC,
+    pubsub_topic,
     waku_lightpush_publish,
     waku_publish,
 )
 from src.deployments.registry import experiment
 from src.deployments.waku.bridge import Bridge
 from src.deployments.waku.builders.builders import WakuStatefulSetBuilder
+from src.deployments.waku.builders.helpers import WAKU_CONTAINER_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +33,9 @@ LogLevel = Literal["INFO", "DEBUG", "TRACE"]
 Protocol = Literal["relay", "lightpush"]
 
 WAKU_REST_PORT = 8645
+FILTER_SUBSCRIBE_BATCH = 50
+FILTER_PING_INTERVAL_S = 120
+"""Well inside the filter server's 5 minute subscription lifetime, so a slow round still fits."""
 
 BOOTSTRAP_SERVICE = "zerotesting-bootstrap"
 FILTER_SERVER_SERVICE = "zerotesting-service"
@@ -178,6 +186,43 @@ def build_nodes(namespace: str, config: ExpConfig) -> Dict[str, V1Deployable]:
     }
 
 
+async def _filter_rest_call(namespace: str, pod_name: str, curl_args: str, action: str):
+    """Run one filter REST call inside an edge node and require an OK status."""
+    # The exec handshake blocks, and this runs alongside the publish loop.
+    command = await asyncio.to_thread(
+        exec_command_in_pod,
+        namespace,
+        pod_name,
+        ["/bin/sh", "-c", f"curl -s {curl_args}"],
+        container=WAKU_CONTAINER_NAME,
+    )
+    await command.collect_output_async()
+    if not command.ok:
+        raise RuntimeError(f"{action} failed on `{pod_name}`: `{command.output}`")
+    if json.loads(command.output).get("statusDesc") != "OK":
+        raise RuntimeError(f"{action} rejected on `{pod_name}`: `{command.output}`")
+
+
+async def filter_subscribe(namespace: str, pod_name: str, content_topic: str, topic: str):
+    """Ask one edge node to subscribe. --filternode only names the peer to ask."""
+    body = json.dumps(
+        {"requestId": pod_name, "contentFilters": [content_topic], "pubsubTopic": topic}
+    )
+    url = f"http://127.0.0.1:{WAKU_REST_PORT}/filter/v2/subscriptions"
+    await _filter_rest_call(
+        namespace,
+        pod_name,
+        f"-X POST {url} -H 'Content-Type: application/json' -d '{body}'",
+        "Subscribe",
+    )
+
+
+async def filter_ping(namespace: str, pod_name: str):
+    """Refresh one edge node's subscription, which the server drops after 5 minutes."""
+    url = f"http://127.0.0.1:{WAKU_REST_PORT}/filter/v2/subscriptions/{pod_name}"
+    await _filter_rest_call(namespace, pod_name, url, "Ping")
+
+
 async def publish(
     protocol: Protocol,
     namespace: str,
@@ -225,6 +270,59 @@ class FullLogosDeliveryExperiment(BaseExperiment[ExpConfig]):
     def log_event(self, event):
         logger.info(event)
         return super().log_event(event)
+
+    async def _each_filter_client(self, action, *args) -> int:
+        """Run `action` on every filter client in batches, returning how many succeeded."""
+        pods = [f"fclient-0-{index}" for index in range(0, self.config.num_filter_clients)]
+        succeeded = 0
+        for start in range(0, len(pods), FILTER_SUBSCRIBE_BATCH):
+            batch = pods[start : start + FILTER_SUBSCRIBE_BATCH]
+            results = await asyncio.gather(
+                *(action(self.namespace, pod, *args) for pod in batch),
+                return_exceptions=True,
+            )
+            for pod, result in zip(batch, results):
+                if isinstance(result, Exception):
+                    logger.error(f"`{action.__name__}` failed on `{pod}`: {result}")
+                else:
+                    succeeded += 1
+        return succeeded
+
+    async def subscribe_filter_clients(self, topic: str):
+        """Subscribe every filter client, in batches so the API server keeps up."""
+        if self.dry_run:
+            return
+        subscribed = await self._each_filter_client(
+            filter_subscribe, self.config.content_topic, topic
+        )
+        self.log_event(
+            {
+                "event": "filter_subscribed",
+                "subscribed": subscribed,
+                "clients": self.config.num_filter_clients,
+            }
+        )
+
+    async def keep_filter_subscriptions_alive(self, stop: asyncio.Event):
+        """Ping every filter client in subscribe order until `stop`, so none reaches its TTL."""
+        if self.dry_run:
+            return
+        while not stop.is_set():
+            started = time.monotonic()
+            pinged = await self._each_filter_client(filter_ping)
+            elapsed = time.monotonic() - started
+            self.log_event(
+                {
+                    "event": "filter_pinged",
+                    "pinged": pinged,
+                    "clients": self.config.num_filter_clients,
+                    "round_s": round(elapsed, 1),
+                }
+            )
+            try:
+                await asyncio.wait_for(stop.wait(), max(0.0, FILTER_PING_INTERVAL_S - elapsed))
+            except asyncio.TimeoutError:
+                pass
 
     def _publish_target(self, protocol: Protocol) -> tuple:
         """Relay goes straight into the mesh; lightpush goes through an edge node."""
@@ -294,7 +392,13 @@ class FullLogosDeliveryExperiment(BaseExperiment[ExpConfig]):
         await asyncio.sleep(self.config.delay_cold_start)
         self.log_event("nodes_settled")
 
+        await self.subscribe_filter_clients(pubsub_topic(cluster_id))
+
+        stop_pings = asyncio.Event()
+        pings = asyncio.create_task(self.keep_filter_subscriptions_alive(stop_pings))
         await self._publish_loop(cluster_id)
+        stop_pings.set()
+        await pings
 
         await asyncio.sleep(self.config.post_publish_dwell)
 
