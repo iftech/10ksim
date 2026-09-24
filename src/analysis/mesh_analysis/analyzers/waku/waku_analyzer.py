@@ -218,12 +218,7 @@ class WakuAnalyzer(Nimlibp2pAnalyzer):
     def check_delivery_latency(
         self, lightpush_sets: List[Tuple[str, int]], filter_sets: List[Tuple[str, int]]
     ) -> AnalysisResult:
-        """
-        Delivery latency per protocol, each measured from when its message entered the network.
-
-        Has to run after analyze_reliability, whose delivery summary supplies the relay
-        receipts. Writes one CSV per path and a CDF of all of them under `latency/`.
-        """
+        """Latency per path from when each message entered the network; run after reliability."""
         received_csv = self._dump_analysis_path / "summary" / "received.csv"
         if not received_csv.exists():
             reason = f"No delivery summary to measure from. path: `{received_csv}`"
@@ -271,9 +266,9 @@ class WakuAnalyzer(Nimlibp2pAnalyzer):
             "folder": str(out_dir),
         }
         if missing or unmatched:
-            intermediates[
-                "failed"
-            ] = f"missing paths: `{missing}` unmatched filter receipts: `{unmatched}`"
+            intermediates["failed"] = (
+                f"missing paths: `{missing}` unmatched filter receipts: `{unmatched}`"
+            )
         return AnalysisResult(
             name="delivery_latency",
             intermediates=intermediates,

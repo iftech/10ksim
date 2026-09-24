@@ -33,8 +33,7 @@ class LatencyPlotConfig(BaseModel):
     """Curve label -> run folder (or the received.csv itself)."""
     percentiles: List[PositiveInt] = Field(default_factory=lambda: list(DEFAULT_PERCENTILES))
     log_x: bool = True
-    """Log the latency axis: delivery latency spans milliseconds to seconds when a mesh degrades.
-    A box plot puts latency on y, and a log axis cannot show delays at or below zero."""
+    """Log the latency axis (x on a CDF, y on a box): it spans ms to seconds in a degraded mesh."""
     xlabel_name: str = "Delivery latency (ms)"
     ylabel_name: str = "Share of deliveries"
     fig_size: List[PositiveInt] = Field(default_factory=lambda: [10, 6])

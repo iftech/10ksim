@@ -1,10 +1,4 @@
-"""Delivery latency per protocol for a waku run with relay, lightpush and filter nodes.
-
-Every delay is measured from the moment its message entered the network, which is known
-exactly on each path. A lightpush message enters when its service node handles the
-request. A relay message enters when its publish target receives it over REST, which is
-that message's first relay receipt.
-"""
+"""Waku delivery latency per path, from when each message entered the network."""
 
 from pathlib import Path
 from typing import Dict
@@ -26,18 +20,14 @@ def _delay_ms(frame: pd.DataFrame, entry: pd.Series) -> pd.DataFrame:
 
 
 def relay_receipts(received: pd.DataFrame, lightpush: pd.DataFrame) -> pd.DataFrame:
-    """Reliability's received rows without the lightpush handling rows it also collects.
-
-    The handling node publishes the message itself and never logs a relay receipt for it,
-    so the message and pod together identify the handling row exactly.
-    """
+    """Reliability's received rows without the lightpush handling rows (same message and pod)."""
     handled = pd.MultiIndex.from_frame(lightpush[[MSG, POD]])
     rows = pd.MultiIndex.from_frame(received[[MSG, POD]])
     return received[~rows.isin(handled)]
 
 
 def entry_times(relay: pd.DataFrame, lightpush: pd.DataFrame) -> pd.Series:
-    """When each message entered the network, indexed by message hash."""
+    """When each message entered the network: lightpush handling, else first relay receipt."""
     first_receipt = relay.groupby(MSG)[TIMESTAMP].min()
     if lightpush.empty:
         return first_receipt
