@@ -1,3 +1,4 @@
+import argparse
 import logging
 from pathlib import Path
 from typing import List
@@ -9,6 +10,8 @@ from src.analysis.metrics.scrapper import Scrapper
 from src.analysis.metrics.waku.metrics import archive_insert_micros, role_metrics
 from src.analysis.plotting.config import DataGroup, PlotConfig, PlotConfigBuilder
 from src.analysis.plotting.metrics_plotter import MetricsPlotter
+from src.analysis.utils.file_utils import extract_exps
+from src.analysis.utils.log_utils import init_logger
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +55,7 @@ def role_plots(configs: List[ScrapeConfig], label: str, out_dir: Path) -> List[P
     order = [path.name for path in paths]
 
     def plot(name: str, metrics: List[str], ylabel: str, scale: int, roles=None) -> PlotConfig:
-        # The plotter only reads a data path's own file when include_files is set;
-        # otherwise it reads every role's file for every role.
+        # Without include_files the plotter pools every role's file under each role.
         builder = (
             PlotConfigBuilder(name=str(out_dir / name))
             .with_groups(group)
@@ -91,3 +93,20 @@ def scrape_and_plot_roles(k8s_config: str, exp: dict, dump_location: Path, label
     out_dir.mkdir(parents=True, exist_ok=True)
     MetricsPlotter(configs=role_plots(configs, label, out_dir)).create_plots()
     return out_dir
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Scrape and plot resources per node role.")
+    parser.add_argument("runs", nargs="+", help="Run folders holding a metadata.json")
+    parser.add_argument("--label", default="full logos delivery", help="Legend label")
+    parser.add_argument("--config", default=str(Path.home() / ".kube/config"), help="Kube config")
+    args = parser.parse_args()
+    init_logger(logging.getLogger(), verbosity=2)
+    for run in map(Path, args.runs):
+        for exp in extract_exps([run], []):
+            out = scrape_and_plot_roles(args.config, exp, run / "metrics", args.label)
+            logger.info(f"Role plots written to {out}")
+
+
+if __name__ == "__main__":
+    main()
