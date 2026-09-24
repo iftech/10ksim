@@ -184,6 +184,7 @@ def get_full_logos_delivery_analyzer(metadata) -> Analyzer:
             expected_num_peers=sum(num for _, num in relaying),
             expected_num_messages=params["num_messages"],
         )
+        .with_store_archive_check(folder=Path(out_folder) / "store_messages")
         .with_dump_analysis_dir(f"{out_folder}/analysis/")
     )
 
