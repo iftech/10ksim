@@ -52,6 +52,21 @@ def test_a_muxer_missing_one_metric_does_not_drop_the_others(tmp_path):
     assert written[0].exists()
 
 
+def test_a_dump_missing_part_of_a_plot_is_left_out_of_it(tmp_path, caplog):
+    root = tmp_path / "metrics"
+    dumps = {
+        "yamux": _scrape_dump(root, "yamux", ["libp2p-in", "libp2p-out"]),
+        "quic": _scrape_dump(root, "quic", ["libp2p-in"]),
+    }
+    spec = [PlotConfig(name="bandwidth", metrics=["libp2p-in", "libp2p-out"], scale_x=1000)]
+
+    with caplog.at_level(logging.ERROR):
+        written = plot_run_metrics(dumps, tmp_path / "plots", xlabel="test", plots=spec)
+
+    assert written[0].exists()
+    assert "`quic` has no ['libp2p-out'] data" in caplog.text
+
+
 def test_the_standard_set_covers_the_report_figures():
     names = {plot.name for plot in STANDARD_PLOTS}
     assert names == {"bandwidth", "memory", "connections"}

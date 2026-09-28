@@ -71,9 +71,15 @@ def plot_run_metrics(
     written = []
     configs = []
     for template in plots or STANDARD_PLOTS:
-        available = {
-            label: dump for label, dump in dumps.items() if _has_any(dump, template.metrics)
-        }
+        available = {}
+        for label, dump in dumps.items():
+            missing = _missing_metrics(dump, template.metrics)
+            if missing:
+                logger.error(
+                    f"`{label}` has no {missing} data; leaving it out of the {template.name} plot"
+                )
+            else:
+                available[label] = dump
         if not available:
             logger.warning(f"No data for the {template.name} plot; skipping it")
             continue
@@ -100,5 +106,5 @@ def plot_run_metrics(
     return written
 
 
-def _has_any(dump: Path, metrics: List[str]) -> bool:
-    return any((dump / metric).is_dir() or (dump / metric).is_file() for metric in metrics)
+def _missing_metrics(dump: Path, metrics: List[str]) -> List[str]:
+    return [metric for metric in metrics if not (dump / metric).exists()]
