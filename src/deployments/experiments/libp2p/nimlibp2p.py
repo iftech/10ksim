@@ -3,7 +3,7 @@ import logging
 import random
 import time
 import traceback
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, Optional
 
 from kubernetes.client import V1Probe, V1ServicePort, V1StatefulSet, V1TCPSocketAction
 from pydantic import BaseModel, ConfigDict, Field, NonNegativeFloat, NonNegativeInt, model_validator
@@ -41,6 +41,8 @@ class ExpConfig(BaseModel):
     delay_after_publish: NonNegativeFloat = 1
     muxer: Muxer = "yamux"
     image: Image = Image(repo="pearsonwhite/dst-nimlibp2p-logging", tag="wip-4.2-1.16.0-amd")
+    bootstrap_image: Optional[Image] = None
+    """Image for the kad anchor when it is a separate binary; defaults to `image`."""
     discovery: Discovery = "static"
     """ "kad-dht" discovers peers through a bootstrap node; "static" uses the CONNECTTO dial."""
     connect_to: NonNegativeInt = 10
@@ -52,6 +54,8 @@ class ExpConfig(BaseModel):
     network_loss_pct: float = Field(default=0, ge=0, le=100)  # percent; folded into the netem qdisc
     node_start_delay: NonNegativeInt = 60
     post_publish_dwell: NonNegativeInt = 90
+    max_connections: NonNegativeInt = 250
+    """Per-node connection cap."""
     max_failed_publishes: NonNegativeInt = 0
     """Publishes that may fail before the run is treated as invalid."""
     capture_pod_logs: bool = True
@@ -87,6 +91,7 @@ def build_nodes(
         .with_option(NimLibp2p.self_trigger, True)
         .with_option(NimLibp2p.muxer, params.muxer)
         .with_option(NimLibp2p.cold_start_delay, params.node_start_delay)
+        .with_option(NimLibp2p.max_connections, params.max_connections)
         .with_readiness_probe(readiness_probe_metrics())
         .with_image(params.image)
     )
@@ -168,7 +173,7 @@ def build_bootstrap_nodes(namespace: str, params: ExpConfig) -> V1StatefulSet:
                 failure_threshold=3,
             )
         )
-        .with_image(params.image)
+        .with_image(params.bootstrap_image or params.image)
         .build()
     )
 
