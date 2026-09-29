@@ -61,12 +61,18 @@ class WakuAnalyzer(Nimlibp2pAnalyzer):
         )
 
     def with_store_archive_check(
-        self, folder: Path, *, received_csv: Optional[Path] = None, on_fail: OnFail = "continue"
+        self,
+        folder: Path,
+        store_nodes: List[str],
+        *,
+        received_csv: Optional[Path] = None,
+        on_fail: OnFail = "continue",
     ) -> Self:
         return self._with_parameterized_check(
             self.check_store_archives,
             on_fail=on_fail,
             folder=folder,
+            store_nodes=store_nodes,
             received_csv=received_csv,
         )
 
@@ -132,11 +138,10 @@ class WakuAnalyzer(Nimlibp2pAnalyzer):
             logger.info(f"Messages from store saved in {result.ok_value}")
 
     def check_store_archives(
-        self, folder: Path, received_csv: Optional[Path] = None
+        self, folder: Path, store_nodes: List[str], received_csv: Optional[Path] = None
     ) -> AnalysisResult:
         """Compare each store node's archive with what relay delivered; run after reliability."""
         received_csv = Path(received_csv or self._dump_analysis_path / "summary" / "received.csv")
-        archives = sorted(Path(folder).glob("store-*.json"))
         intermediates = {"folder": str(folder), "received_csv": str(received_csv)}
 
         def skipped(reason: str) -> AnalysisResult:
@@ -147,8 +152,8 @@ class WakuAnalyzer(Nimlibp2pAnalyzer):
                 status="skipped",
             )
 
-        if not archives:
-            return skipped(f"No store archive dumps found. folder: `{folder}`")
+        if not store_nodes:
+            return skipped("No store nodes to check.")
         if not received_csv.exists():
             return skipped(f"No delivery summary to compare against. path: `{received_csv}`")
 
@@ -157,39 +162,49 @@ class WakuAnalyzer(Nimlibp2pAnalyzer):
             return skipped(f"Delivery summary holds no messages. path: `{received_csv}`")
 
         nodes = {}
-        for archive in archives:
+        for node in store_nodes:
+            archive = Path(folder) / f"{node}.json"
+            if not archive.exists():
+                nodes[node] = {"read": False}
+                logger.error(f"`{node}` has no archive dump, so its store could not be read")
+                continue
             with open(archive) as archive_file:
                 # Store v3 already returns hashes in the 0x form the relay logs use.
                 hashes = {msg.lower() for msg in json.load(archive_file)}
             missing = expected - hashes
             unexpected = hashes - expected
-            nodes[archive.stem] = {
+            nodes[node] = {
+                "read": True,
                 "held": len(hashes),
                 "missing": len(missing),
                 "unexpected": len(unexpected),
             }
             if not missing and not unexpected:
-                logger.info(f"`{archive.stem}` holds all {len(expected)} messages")
+                logger.info(f"`{node}` holds all {len(expected)} messages")
             else:
                 logger.error(
-                    f"`{archive.stem}` holds {len(hashes)} of {len(expected)} messages. "
+                    f"`{node}` holds {len(hashes)} of {len(expected)} messages. "
                     f"missing: `{len(missing)}` unexpected: `{len(unexpected)}`"
                 )
 
         complete = sum(
-            1 for node in nodes.values() if not node["missing"] and not node["unexpected"]
+            1
+            for node in nodes.values()
+            if node["read"] and not node["missing"] and not node["unexpected"]
         )
-        logger.info(f"Store nodes with a complete archive: {complete} of {len(archives)}")
+        unread = sum(1 for node in nodes.values() if not node["read"])
+        logger.info(f"Store nodes with a complete archive: {complete} of {len(store_nodes)}")
         return AnalysisResult(
             name="store_archives",
             intermediates={
                 **intermediates,
                 "expected_num_messages": len(expected),
                 "complete_nodes": complete,
-                "num_store_nodes": len(archives),
+                "num_store_nodes": len(store_nodes),
+                "unread_nodes": unread,
                 "nodes": nodes,
             },
-            status="passed" if complete == len(archives) else "failed",
+            status="passed" if complete == len(store_nodes) else "failed",
         )
 
     def _pull_group(
