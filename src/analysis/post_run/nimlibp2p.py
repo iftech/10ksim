@@ -8,6 +8,7 @@ from src.analysis.mesh_analysis.analyzers.data_puller import DataPuller
 from src.analysis.mesh_analysis.analyzers.nimlibp2p_analyzer import Nimlibp2pAnalyzer
 from src.analysis.plotting.latency_plotter import plot_dump_latency
 from src.analysis.post_run.delivery_cross_check import counter_deliveries, cross_check, report
+from src.analysis.post_run.metrics import plot_run_metrics, scrape_run_metrics
 
 if TYPE_CHECKING:
     from src.deployments.experiments.libp2p.nimlibp2p import NimLibp2pExperiment
@@ -112,3 +113,23 @@ def run_nimlibp2p_analysis(experiment: "NimLibp2pExperiment") -> None:
         plot_dump_latency(dump_dir, label=cfg.muxer)
     except Exception:
         logger.exception("Nimlibp2p latency plot failed")
+    try:
+        _scrape_and_plot(experiment)
+    except Exception:
+        logger.exception("Nimlibp2p metrics scrape failed")
+
+
+def _scrape_and_plot(experiment: "NimLibp2pExperiment") -> None:
+    """Resource and mesh-health figures, off the run's own stable window."""
+    exp = experiment.metadata
+    if not exp.get("results", {}).get("stable"):
+        logger.warning("Run has no stable window; skipping the metrics scrape")
+        return
+
+    label = experiment.config.muxer
+    dump = scrape_run_metrics(exp, experiment.output_folder / "metrics", name=label)
+    plot_run_metrics(
+        {label: dump},
+        experiment.output_folder / "plots",
+        xlabel=f"{experiment.namespace}, {experiment.config.num_relay_nodes} nodes",
+    )
