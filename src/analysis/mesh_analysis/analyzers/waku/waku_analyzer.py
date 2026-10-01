@@ -1,17 +1,30 @@
 # Python Imports
 import ast
 import base64
+import json
 import logging
-from typing import List, Self
+from pathlib import Path
+from typing import List, Optional, Self, Tuple
 
+import pandas as pd
 import seaborn as sns
 from pydantic import NonNegativeInt
 
 # Project Imports
-from src.analysis.mesh_analysis.analyzers.analyzer import OnFail
+from src.analysis.mesh_analysis.analyzers.analyzer import AnalysisResult, OnFail
 from src.analysis.mesh_analysis.analyzers.nimlibp2p_analyzer import Nimlibp2pAnalyzer
+from src.analysis.mesh_analysis.analyzers.waku.delivery_latency import (
+    delivery_latency,
+    write_delivery_latency,
+)
 from src.analysis.mesh_analysis.readers.tracers.message_tracer import MessageTracer
 from src.analysis.mesh_analysis.readers.tracers.waku_tracer import WakuTracer
+from src.analysis.plotting.latency_plotter import (
+    DELAY_COLUMN,
+    LatencyPlotConfig,
+    LatencyPlotter,
+    latency_table,
+)
 from src.analysis.utils import list_utils
 
 logger = logging.getLogger(__name__)
@@ -31,6 +44,36 @@ class WakuAnalyzer(Nimlibp2pAnalyzer):
         return self._with_parameterized_check(
             self.check_store_messages,
             on_fail=on_fail,
+        )
+
+    def with_delivery_latency_check(
+        self,
+        lightpush_sets: List[Tuple[str, int]],
+        filter_sets: List[Tuple[str, int]],
+        *,
+        on_fail: OnFail = "continue",
+    ) -> Self:
+        return self._with_parameterized_check(
+            self.check_delivery_latency,
+            on_fail=on_fail,
+            lightpush_sets=lightpush_sets,
+            filter_sets=filter_sets,
+        )
+
+    def with_store_archive_check(
+        self,
+        folder: Path,
+        store_nodes: List[str],
+        *,
+        received_csv: Optional[Path] = None,
+        on_fail: OnFail = "continue",
+    ) -> Self:
+        return self._with_parameterized_check(
+            self.check_store_archives,
+            on_fail=on_fail,
+            folder=folder,
+            store_nodes=store_nodes,
+            received_csv=received_csv,
         )
 
     def with_reliability_check(
@@ -93,6 +136,159 @@ class WakuAnalyzer(Nimlibp2pAnalyzer):
         )
         if result.is_ok():
             logger.info(f"Messages from store saved in {result.ok_value}")
+
+    def check_store_archives(
+        self, folder: Path, store_nodes: List[str], received_csv: Optional[Path] = None
+    ) -> AnalysisResult:
+        """Compare each store node's archive with what relay delivered; run after reliability."""
+        received_csv = Path(received_csv or self._dump_analysis_path / "summary" / "received.csv")
+        intermediates = {"folder": str(folder), "received_csv": str(received_csv)}
+
+        def skipped(reason: str) -> AnalysisResult:
+            logger.error(reason)
+            return AnalysisResult(
+                name="store_archives",
+                intermediates={**intermediates, "failed": reason},
+                status="skipped",
+            )
+
+        if not store_nodes:
+            return skipped("No store nodes to check.")
+        if not received_csv.exists():
+            return skipped(f"No delivery summary to compare against. path: `{received_csv}`")
+
+        expected = set(pd.read_csv(received_csv)[self.msg_hash_key].unique())
+        if not expected:
+            return skipped(f"Delivery summary holds no messages. path: `{received_csv}`")
+
+        nodes = {}
+        for node in store_nodes:
+            archive = Path(folder) / f"{node}.json"
+            if not archive.exists():
+                nodes[node] = {"read": False}
+                logger.error(f"`{node}` has no archive dump, so its store could not be read")
+                continue
+            with open(archive) as archive_file:
+                # Store v3 already returns hashes in the 0x form the relay logs use.
+                hashes = {msg.lower() for msg in json.load(archive_file)}
+            missing = expected - hashes
+            unexpected = hashes - expected
+            nodes[node] = {
+                "read": True,
+                "held": len(hashes),
+                "missing": len(missing),
+                "unexpected": len(unexpected),
+            }
+            if not missing and not unexpected:
+                logger.info(f"`{node}` holds all {len(expected)} messages")
+            else:
+                logger.error(
+                    f"`{node}` holds {len(hashes)} of {len(expected)} messages. "
+                    f"missing: `{len(missing)}` unexpected: `{len(unexpected)}`"
+                )
+
+        complete = sum(
+            1
+            for node in nodes.values()
+            if node["read"] and not node["missing"] and not node["unexpected"]
+        )
+        unread = sum(1 for node in nodes.values() if not node["read"])
+        logger.info(f"Store nodes with a complete archive: {complete} of {len(store_nodes)}")
+        return AnalysisResult(
+            name="store_archives",
+            intermediates={
+                **intermediates,
+                "expected_num_messages": len(expected),
+                "complete_nodes": complete,
+                "num_store_nodes": len(store_nodes),
+                "unread_nodes": unread,
+                "nodes": nodes,
+            },
+            status="passed" if complete == len(store_nodes) else "failed",
+        )
+
+    def _pull_group(
+        self, tracer: WakuTracer, group: str, sets: List[Tuple[str, int]]
+    ) -> pd.DataFrame:
+        """Every node's rows for one pattern group, as a single frame."""
+        columns = [self.msg_hash_key, "timestamp", "kubernetes.pod_name"]
+        if not sets:
+            return pd.DataFrame(columns=columns)
+        extra_fields = (
+            ["kubernetes.pod_name"]
+            if self.data_puller.is_local()
+            else ["kubernetes.pod_name", "kubernetes.pod_node_name"]
+        )
+        tracer.with_extra_fields(extra_fields)
+        nodes = self.data_puller.get_all_node_dataframes(
+            tracer, [name for name, _ in sets], [count for _, count in sets]
+        )
+        frames = [frame for node in nodes for frame in node[group]]
+        if not frames:
+            return pd.DataFrame(columns=columns)
+        merged = pd.concat(frames, ignore_index=True)
+        merged["kubernetes.pod_name"] = merged["kubernetes.pod_name"].str.removesuffix(".log")
+        return merged
+
+    def check_delivery_latency(
+        self, lightpush_sets: List[Tuple[str, int]], filter_sets: List[Tuple[str, int]]
+    ) -> AnalysisResult:
+        """Latency per path from when each message entered the network; run after reliability."""
+        received_csv = self._dump_analysis_path / "summary" / "received.csv"
+        if not received_csv.exists():
+            reason = f"No delivery summary to measure from. path: `{received_csv}`"
+            logger.error(reason)
+            return AnalysisResult(
+                name="delivery_latency", intermediates={"failed": reason}, status="skipped"
+            )
+
+        received = pd.read_csv(received_csv, parse_dates=["timestamp"])
+        lightpush = self._pull_group(
+            WakuTracer().with_lightpush_handled_pattern_group(), "lightpush_handled", lightpush_sets
+        )
+        filter_received = self._pull_group(
+            WakuTracer().with_filter_received_pattern_group(), "filter_received", filter_sets
+        )
+        paths = delivery_latency(received, lightpush, filter_received)
+
+        out_dir = self._dump_analysis_path / "latency"
+        written = write_delivery_latency(paths, out_dir)
+        LatencyPlotter(
+            configs=[
+                LatencyPlotConfig(name="delivery_latency", runs=written, out_dir=out_dir),
+                LatencyPlotConfig(
+                    name="delivery_latency_box", kind="box", runs=written, out_dir=out_dir
+                ),
+            ]
+        ).create_plots()
+        table = latency_table(written, percentiles=(50, 90, 99))
+        logger.info(f"Delivery latency (ms):\n{table.to_string()}")
+
+        # Kept rather than dropped: cross machine clock error makes a few ms either way normal.
+        negatives = {name: int((frame[DELAY_COLUMN] < 0).sum()) for name, frame in paths.items()}
+        if any(negatives.values()):
+            logger.warning(f"Deliveries with a negative measured delay: {negatives}")
+
+        expected = ["relay"] + ["lightpush"] * bool(lightpush_sets) + ["filter"] * bool(filter_sets)
+        missing = [name for name in expected if name not in paths]
+        unmatched = len(filter_received) - len(paths.get("filter", []))
+        intermediates = {
+            "paths": table.to_dict(),
+            "lightpush_handled": len(lightpush),
+            "filter_receipts": len(filter_received),
+            "unmatched_filter_receipts": unmatched,
+            "negative_delays": negatives,
+            "folder": str(out_dir),
+        }
+        if missing or unmatched:
+            intermediates["failed"] = (
+                f"missing paths: `{missing}` unmatched filter receipts: `{unmatched}`"
+            )
+        return AnalysisResult(
+            name="delivery_latency",
+            intermediates=intermediates,
+            status="failed" if missing or unmatched else "passed",
+        )
 
     def check_filter_messages(self):
         """
