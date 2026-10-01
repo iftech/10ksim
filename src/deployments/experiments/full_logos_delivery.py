@@ -67,6 +67,8 @@ class ExpConfig(BaseModel):
     delay_cold_start: NonNegativeFloat = 300
     delay_after_publish: NonNegativeFloat = 1
     post_publish_dwell: NonNegativeFloat = 60
+    max_failed_publishes: NonNegativeInt = 0
+    """Publishes that may fail before the run is treated as invalid."""
     log_level: LogLevel = "INFO"
     cmd_type: int = 1
     num_enrs: NonNegativeInt = 3
@@ -186,7 +188,8 @@ async def publish(
     msg_size_kbytes: NonNegativeInt,
     cluster_id: int,
     content_topic: str,
-):
+) -> bool:
+    """Publish one message. Returns whether it reached the node."""
     target = Target(name="waku-node", name_template=pod_name, service=service, port=WAKU_REST_PORT)
     try:
         if protocol == "relay":
@@ -205,12 +208,14 @@ async def publish(
                 msg_size_kbytes=msg_size_kbytes,
                 cluster_id=cluster_id,
             )
+        return True
     except PodApiApplicationError as e:
         logger.error(f"PodApiApplicationError: {e} {traceback.format_exc()}")
     except PodApiError as e:
         logger.error(f"PodApiError: {e} {traceback.format_exc()}")
     except Exception as e:
         logger.error(f"Other exception: {e} {traceback.format_exc()}")
+    return False
 
 
 @experiment(name="full-logos-delivery")
@@ -264,8 +269,15 @@ class FullLogosDeliveryExperiment(BaseExperiment[ExpConfig]):
                 )
             )
             await asyncio.sleep(self.config.delay_after_publish)
-        await asyncio.gather(*tasks)
+        published = await asyncio.gather(*tasks)
+        failed = published.count(False)
+        self.log_event({"event": "publish_summary", "attempted": len(published), "failed": failed})
         self.log_event("publisher_messages_finished")
+        if failed > self.config.max_failed_publishes:
+            self.fail_run(
+                f"{failed} of {len(published)} messages were never published, so delivery "
+                f"is measured against a denominator the run did not send"
+            )
 
     async def _run(self):
         self.log_event("run_start")
