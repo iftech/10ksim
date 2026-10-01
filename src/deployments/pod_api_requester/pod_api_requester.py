@@ -90,6 +90,15 @@ def wrap_arg(arg: Union[Target, Endpoint, str]) -> dict:
     return {"kind": kind, "value": arg}
 
 
+def redact_payloads(obj):
+    """Copy `obj` with every "payload" value replaced, so logs stay readable."""
+    if isinstance(obj, dict):
+        return {k: "<redacted>" if k == "payload" else redact_payloads(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [redact_payloads(item) for item in obj]
+    return obj
+
+
 async def request(
     # TODO: Consider passing in publisher k8s object and extract namespace, service_name, and app from there.
     namespace: str,
@@ -197,7 +206,7 @@ async def pod_api_request(
 
     url = url_template.format(target_ip=target_ip, node_port=node_port)
 
-    logger.info(f"publishing message. url: `{url}` data: `{data}`")
+    logger.info(f"publishing message. url: `{url}` data: `{redact_payloads(data)}`")
     try:
         response = await post_async(url, data)
         response_obj = json.loads(response.text)
@@ -244,7 +253,7 @@ async def pod_api_request(
             pass
         raise PodApiHttpError(err)
 
-    logger.info(f"Response: `{response_obj}`")
+    logger.info(f"Response: `{redact_payloads(response_obj)}`")
     return response_obj
 
 

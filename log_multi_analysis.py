@@ -105,6 +105,8 @@ def get_analyzer(metadata) -> Analyzer:
     experiment_name = metadata.get("experiment", {}).get("name", "")
     if experiment_name.startswith("connmanager"):
         return get_connmanager_analyzer(metadata)
+    if experiment_name == "full-logos-delivery":
+        return get_full_logos_delivery_analyzer(metadata)
     return get_analyzer_for_dev_testing(metadata)
 
 
@@ -148,6 +150,38 @@ def get_analyzer_for_dev_testing(metadata) -> Analyzer:
             stateful_sets=[ss[0] for ss in reliability],
             nodes_per_ss=[ss[1] for ss in reliability],
             expected_num_peers=params["num_relay_nodes"],
+            expected_num_messages=params["num_messages"],
+        )
+        .with_dump_analysis_dir(f"{out_folder}/analysis/")
+    )
+
+
+RELAYING_SETS = ("fserver", "lpserver", "store")
+"""Roles that join the mesh. Bootstrap and the edge clients never log a received message."""
+
+
+def get_full_logos_delivery_analyzer(metadata) -> Analyzer:
+    stack = metadata["stack"]
+    params = metadata["params"]
+    data_puller = DataPuller().with_kwargs(stack)
+    stateful_sets = stack["stateful_sets"]
+    nodes_per_statefulset = stack["nodes_per_statefulset"]
+    out_folder = metadata["experiment"]["dump"]["output_folder"]
+
+    relaying = [
+        (name, num)
+        for name, num in zip(stateful_sets, nodes_per_statefulset)
+        if name.startswith(RELAYING_SETS)
+    ]
+
+    return (
+        WakuAnalyzer()
+        .with_data_puller(data_puller)
+        .with_ss_check(stateful_sets, nodes_per_statefulset)
+        .with_reliability_check(
+            stateful_sets=[name for name, _ in relaying],
+            nodes_per_ss=[num for _, num in relaying],
+            expected_num_peers=sum(num for _, num in relaying),
             expected_num_messages=params["num_messages"],
         )
         .with_dump_analysis_dir(f"{out_folder}/analysis/")
@@ -212,8 +246,12 @@ async def main():
     summary = defaultdict(int)
 
     all_results = []
-    exp_class = "WakuExperiment"
-    for exp in get_experiments(experiment_class=exp_class):
+    experiments = [
+        exp
+        for exp_class in ("WakuExperiment", "FullLogosDeliveryExperiment")
+        for exp in get_experiments(experiment_class=exp_class)
+    ]
+    for exp in experiments:
         try:
             results = await process_experiment(exp)
             all_results.append(results)
