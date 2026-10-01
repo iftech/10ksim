@@ -10,7 +10,7 @@ plot and this does not fit MetricsPlotter.
 import argparse
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -27,11 +27,13 @@ DEFAULT_PERCENTILES = (50, 95, 99)
 
 class LatencyPlotConfig(BaseModel):
     name: str = "latency"
+    kind: Literal["cdf", "box"] = "cdf"
+    """A CDF with one curve per run, or a box per run with outliers shown."""
     runs: Dict[str, Path] = Field(default_factory=dict)
     """Curve label -> run folder (or the received.csv itself)."""
     percentiles: List[PositiveInt] = Field(default_factory=lambda: list(DEFAULT_PERCENTILES))
     log_x: bool = True
-    """Log x: delivery latency spans milliseconds to seconds when a mesh degrades."""
+    """Log the latency axis (x on a CDF, y on a box): it spans ms to seconds in a degraded mesh."""
     xlabel_name: str = "Delivery latency (ms)"
     ylabel_name: str = "Share of deliveries"
     fig_size: List[PositiveInt] = Field(default_factory=lambda: [10, 6])
@@ -74,6 +76,8 @@ class LatencyPlotter(BaseModel):
             logger.info(f'Plot "{config.name}" finished')
 
     def _create_plot(self, config: LatencyPlotConfig) -> Optional[Path]:
+        if config.kind == "box":
+            return self._create_box_plot(config)
         plt.figure(figsize=tuple(config.fig_size))
         plotted = False
         for label, run in config.runs.items():
@@ -101,6 +105,34 @@ class LatencyPlotter(BaseModel):
         plt.xlabel(config.xlabel_name)
         plt.ylabel(config.ylabel_name)
         plt.legend()
+        plt.tight_layout()
+        out = Path(config.out_dir or ".") / f"{config.name}.jpg"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(out)
+        plt.close()
+        return out
+
+    def _create_box_plot(self, config: LatencyPlotConfig) -> Optional[Path]:
+        frames = [
+            pd.DataFrame({"run": f"{label} (n={delays.size})", DELAY_COLUMN: delays})
+            for label, delays in ((label, load_delays(run)) for label, run in config.runs.items())
+            if not delays.empty
+        ]
+        if not frames:
+            logger.warning(f'No latency data for "{config.name}"')
+            return None
+
+        plt.figure(figsize=tuple(config.fig_size))
+        sns.boxplot(
+            data=pd.concat(frames, ignore_index=True),
+            x="run",
+            y=DELAY_COLUMN,
+            flierprops={"marker": ".", "markersize": 3, "alpha": 0.3},
+        )
+        if config.log_x:
+            plt.yscale("log")
+        plt.xlabel("")
+        plt.ylabel(config.xlabel_name)
         plt.tight_layout()
         out = Path(config.out_dir or ".") / f"{config.name}.jpg"
         out.parent.mkdir(parents=True, exist_ok=True)
