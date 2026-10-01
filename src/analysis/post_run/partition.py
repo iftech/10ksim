@@ -77,11 +77,8 @@ def partition_table(
     heal: datetime,
     num_nodes: int,
 ) -> List[Row]:
-    """Whole before the cut, contained under the split, then reconverging after the heal.
-
-    Messages no node but the publisher received get their own row and are left out of the
-    phase rows: they never entered the network, so they say nothing about the split.
-    """
+    """Whole before the cut, contained under the split, reconverging after the heal."""
+    # Messages only their publisher received never entered the network; counted apart.
     alone = per_msg[per_msg["reach"] <= 1]
     spread = per_msg[per_msg["reach"] > 1]
     before = spread[spread["phase"] == "before"]
