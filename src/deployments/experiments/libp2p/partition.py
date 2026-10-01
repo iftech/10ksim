@@ -133,7 +133,7 @@ class PartitionBase(NimLibp2pExperiment):
         labelled = label_pods(side_a, self.namespace, {SIDE_LABEL: "a"}, self.api_client)
         labelled += label_pods(side_b, self.namespace, {SIDE_LABEL: "b"}, self.api_client)
         expected = len(side_a) + len(side_b)
-        if anchor_side:
+        if anchor_side and self.config.discovery == "kad-dht":
             # An unlabelled anchor stays reachable from both sides.
             anchors = [f"{BOOTSTRAP_NAME}-{i}" for i in range(self.config.bootstrap_nodes)]
             labelled += label_pods(
@@ -212,14 +212,12 @@ class PartitionCutConfig(PartitionConfig):
 
 @experiment(name="nimlibp2p-partition-cut")
 class NetworkPartitionCut(PartitionBase):
-    """Regression run where one formed network is cut in two and later healed.
-
-    Pods are labelled at readiness, since a policy cuts a freshly labelled pod about 20 s late.
-    """
+    """Regression run where one formed network is cut in two and later healed."""
 
     config: PartitionCutConfig
 
     async def _after_nodes(self, nodes: V1StatefulSet) -> None:
+        """Label at readiness: a policy cuts a freshly labelled pod about 20 s late."""
         self._label_sides(nodes, anchor_side=self.config.anchor_side)
 
     async def _mid_run(self, nodes: V1StatefulSet) -> None:

@@ -49,7 +49,7 @@ def _experiment(cls, config, tmp_path):
 
 @pytest.mark.asyncio
 async def test_cut_labels_at_readiness_and_applies_only_policies_at_the_cut(tmp_path, steps):
-    config = PartitionCutConfig(num_relay_nodes=4, cut_at=30, heal_at=120)
+    config = PartitionCutConfig(num_relay_nodes=4, discovery="kad-dht", cut_at=30, heal_at=120)
     exp = _experiment(NetworkPartitionCut, config, tmp_path)
     await exp._after_nodes(NODES)
     assert steps == [("label", "a"), ("label", "b"), ("label", "a")]
@@ -63,3 +63,11 @@ async def test_split_before_formation_labels_and_cuts_together(tmp_path, steps):
     exp = _experiment(NetworkPartition, PartitionConfig(num_relay_nodes=4), tmp_path)
     await exp._after_nodes(NODES)
     assert steps == [("label", "a"), ("label", "b"), ("policies", 2)]
+
+
+@pytest.mark.asyncio
+async def test_cut_without_an_anchor_labels_only_the_nodes(tmp_path, steps):
+    config = PartitionCutConfig(num_relay_nodes=4, discovery="static")
+    exp = _experiment(NetworkPartitionCut, config, tmp_path)
+    await exp._after_nodes(NODES)
+    assert steps == [("label", "a"), ("label", "b")]
