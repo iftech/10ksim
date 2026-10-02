@@ -1,5 +1,5 @@
 import logging
-from typing import Union
+from typing import Optional, Tuple, Union
 
 from pydantic import NonNegativeInt
 
@@ -15,6 +15,7 @@ async def libp2p_dst_node_publish(
     *,
     topic: str = "test",
     msg_size_bytes: NonNegativeInt = 1,
+    requester: Optional[Tuple[str, int]] = None,
 ) -> dict:
     endpoint = Endpoint(
         name="nimlibp2p_message",
@@ -33,4 +34,5 @@ async def libp2p_dst_node_publish(
             "target": wrap_arg(target),
             "endpoint": wrap_arg(endpoint),
         },
+        requester=requester,
     )

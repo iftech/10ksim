@@ -8,6 +8,7 @@ from src.deployments.pod_api_requester import pod_api_requester
 from src.deployments.pod_api_requester.pod_api_requester import (
     REQUEST_TIMEOUT_S,
     PodApiClientError,
+    PodResponse,
     post_async,
 )
 
@@ -63,3 +64,27 @@ async def test_a_timeout_surfaces_as_a_typed_error(mocker):
             url_template="http://{target_ip}:{node_port}/process",
             data={},
         )
+
+
+@pytest.mark.asyncio
+async def test_a_known_requester_is_not_looked_up_again(mocker):
+    lookup = mocker.patch.object(pod_api_requester, "_get_api_requester_info")
+    post = mocker.patch.object(
+        pod_api_requester,
+        "post_async",
+        return_value=PodResponse(
+            status_code=200, reason="OK", text='{"response": {"status_code": 200, "text": "ok"}}'
+        ),
+    )
+
+    await pod_api_requester.pod_api_request(
+        namespace="ns",
+        service_name="svc",
+        app="app",
+        url_template="http://{target_ip}:{node_port}/process",
+        data={},
+        requester=("10.0.0.1", 30000),
+    )
+
+    lookup.assert_not_called()
+    assert post.call_args.args[0] == "http://10.0.0.1:30000/process"
