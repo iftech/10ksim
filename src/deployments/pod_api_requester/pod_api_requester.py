@@ -196,7 +196,8 @@ async def pod_api_request(
     publisher_pod: str | NonNegativeInt = 0,
     requester: Optional[Tuple[str, int]] = None,
 ) -> dict:
-    target_ip, node_port = requester or _get_api_requester_info(
+    target_ip, node_port = requester or await asyncio.to_thread(
+        _get_api_requester_info,
         namespace=namespace,
         service_name=service_name,
         app=app,

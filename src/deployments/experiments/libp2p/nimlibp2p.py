@@ -280,7 +280,7 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
             }
         )
 
-        requester = requester_address(namespace)
+        address = requester_address(namespace)
         logger.info(f"Starting publish loop for nodes in `{name}`")
 
         self.log_event("start_messages")
@@ -292,9 +292,7 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
             index = random.randint(0, self._publishable_nodes() - 1)
             random_name = f"{name}-{index}"
             self.log_event({"event": "publish", "node": random_name, "index": msg_index})
-            tasks.append(
-                asyncio.create_task(publish(self.config, namespace, random_name, requester))
-            )
+            tasks.append(asyncio.create_task(publish(self.config, namespace, random_name, address)))
             await asyncio.sleep(self.config.delay_after_publish)
         published = await asyncio.gather(*tasks)
         failed = published.count(False)
