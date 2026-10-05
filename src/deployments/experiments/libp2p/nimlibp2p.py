@@ -13,7 +13,7 @@ from src.deployments.core.configs.container import Image
 from src.deployments.core.k8s_rollout import resolved_images
 from src.deployments.core.pod_logs import capture_pod_logs
 from src.deployments.experiments.base_experiment import BaseExperiment
-from src.deployments.libp2p.bridge import Bridge
+from src.deployments.libp2p.bridge import WAN_BANDWIDTH_MBIT, WAN_LATENCY_MS, Bridge
 from src.deployments.libp2p.builders.builders import Libp2pStatefulSetBuilder
 from src.deployments.libp2p.builders.builders import Option as NimLibp2p
 from src.deployments.libp2p.builders.helpers import readiness_probe_metrics
@@ -48,9 +48,10 @@ class ExpConfig(BaseModel):
     connect_to: NonNegativeInt = 10
     """Number of nodes to try to connect to for each node when starting up"""
     bootstrap_nodes: NonNegativeInt = 1
-    network_delay: NonNegativeInt = 0
+    network_delay: NonNegativeInt = WAN_LATENCY_MS
     network_jitter: NonNegativeInt = 0
-    network_bandwidth_mbit: NonNegativeInt = 0  # 0 = uncapped; folded into the netem qdisc
+    network_bandwidth_mbit: NonNegativeInt = WAN_BANDWIDTH_MBIT
+    """Link rate, folded into the netem qdisc; 0 leaves it uncapped."""
     network_loss_pct: float = Field(default=0, ge=0, le=100)  # percent; folded into the netem qdisc
     node_start_delay: NonNegativeInt = 60
     post_publish_dwell: NonNegativeInt = 90

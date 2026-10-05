@@ -7,6 +7,7 @@ from typing import ClassVar, Literal, Optional
 from pydantic import BaseModel, ConfigDict, NonNegativeFloat, NonNegativeInt, PositiveInt
 
 from src.deployments.experiments.base_experiment import BaseExperiment
+from src.deployments.libp2p.bridge import WAN_BANDWIDTH_MBIT, WAN_LATENCY_MS
 from src.deployments.registry import experiment
 from src.deployments.shadow.builders import (
     build_configmap,
@@ -47,8 +48,8 @@ class ExpConfig(BaseModel):
     lsquic_tick_floor_us: NonNegativeInt = 0
     # Per-pod process start stagger (pod-i starts at 5000 + i*jitter ms); 0 = lockstep.
     start_jitter_ms: NonNegativeInt = 0
-    latency_ms: Optional[NonNegativeInt] = None
-    bandwidth_mbit: Optional[PositiveInt] = None
+    latency_ms: Optional[NonNegativeInt] = WAN_LATENCY_MS
+    bandwidth_mbit: Optional[PositiveInt] = WAN_BANDWIDTH_MBIT
     loss_pct: NonNegativeFloat = 0
     # Peers per /24; 1 = every peer on its own subnet.
     hosts_per_subnet: PositiveInt = 1
