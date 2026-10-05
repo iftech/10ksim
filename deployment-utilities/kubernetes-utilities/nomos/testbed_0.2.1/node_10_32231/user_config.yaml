@@ -1,0 +1,246 @@
+network:
+  backend:
+    swarm:
+      host: 0.0.0.0
+      port: 3010
+      node_key: 09c1a9986547946a2ab62364f8fb908a5828820afd0ec99f26472bfb86b1f89a
+      gossipsub:
+        history_length: 5
+        history_gossip: 3
+        mesh_n: 6
+        mesh_n_low: 5
+        mesh_n_high: 12
+        retain_scores: 4
+        gossip_lazy: 6
+        gossip_factor: 0.25
+        heartbeat_initial_delay:
+          secs: 5
+          nanos: 0
+        heartbeat_interval:
+          secs: 1
+          nanos: 0
+        fanout_ttl:
+          secs: 60
+          nanos: 0
+        check_explicit_peers_ticks: 300
+        duplicate_cache_time:
+          secs: 60
+          nanos: 0
+        validate_messages: false
+        allow_self_origin: false
+        do_px: false
+        prune_peers: 0
+        prune_backoff:
+          secs: 60
+          nanos: 0
+        unsubscribe_backoff:
+          secs: 10
+          nanos: 0
+        backoff_slack: 1
+        flood_publish: true
+        graft_flood_threshold:
+          secs: 10
+          nanos: 0
+        mesh_outbound_min: 2
+        opportunistic_graft_ticks: 60
+        opportunistic_graft_peers: 2
+        gossip_retransimission: 3
+        max_messages_per_rpc: null
+        max_ihave_length: 5000
+        max_ihave_messages: 10
+        iwant_followup_time:
+          secs: 3
+          nanos: 0
+        published_message_ids_cache_time:
+          secs: 10
+          nanos: 0
+      kademlia:
+        query_timeout_secs: null
+        replication_factor: null
+        parallelism: null
+        disjoint_query_paths: null
+        max_packet_size: null
+        kbucket_inserts: null
+        caching: null
+        periodic_bootstrap_interval_secs: null
+      identify:
+        agent_version: null
+        interval_secs: null
+        push_listen_addr_updates: null
+        cache_size: null
+        hide_listen_addrs: true
+      chain_sync:
+        peer_response_timeout: 5000
+        max_inbound_requests: 10
+      nat:
+        type: static
+        external_address: /ip4/185.181.228.123/udp/32231/quic-v1
+    initial_peers:
+      - /ip4/185.181.228.123/udp/32222/quic-v1/p2p/12D3KooWSDozCCyu58DX48RDPHBWqDXkogXZqEtBJrS9QXNuuptk
+      - /ip4/185.181.228.123/udp/32223/quic-v1/p2p/12D3KooWQkUwh3FPjZmkBQi5L46P8kTDYWyatxSh7wVfLoPQ56uy
+      - /ip4/185.181.228.123/udp/32224/quic-v1/p2p/12D3KooWQUuQwRxkYHo9KhQ6yycBSw6KqpyKc5atr22QnE8ZRoUF
+      - /ip4/185.181.228.123/udp/32225/quic-v1/p2p/12D3KooWDnJNm4v414AQQGYHLukW8wHdFdf9NFPUSswZMqEJWj2H
+      - /ip4/185.181.228.123/udp/32226/quic-v1/p2p/12D3KooWKjyUoJfV7YRzgbXEiWH2q2bq55XVTupu4P1mbjADyoLG
+      - /ip4/185.181.228.123/udp/32227/quic-v1/p2p/12D3KooWP5TTTSxy8d5EzHinUzHGuNN48RUbdFC3Ycrzj3FPrjVu
+      - /ip4/185.181.228.123/udp/32228/quic-v1/p2p/12D3KooWLqAHSNaCnuTkFYejzXj4VqArLNuZQYjkJcdfBzi8DupZ
+      - /ip4/185.181.228.123/udp/32229/quic-v1/p2p/12D3KooWCN7LMfjEuEtuaEYzpU9aQz37Cy8FdLz9EPzi5o86JuT6
+      - /ip4/185.181.228.123/udp/32230/quic-v1/p2p/12D3KooWEFGYzRK6daVdTHq5RMLJ4GSUGkXFU91c6VUWVPtZTxg4
+blend:
+  non_ephemeral_signing_key_id: 131e3fb72cc8fc1163f48e528413bf5eda937e5a1667c5dfa40322897982ab2e
+  core:
+    backend:
+      listening_address: /ip4/0.0.0.0/udp/3400/quic-v1
+      core_peering_degree:
+        start: 3
+        end: 5
+      edge_node_connection_timeout: '1.000000000'
+      max_edge_node_incoming_connections: 300
+      max_dial_attempts_per_peer: 3
+      peering_degree_check_interval: '60.000000000'
+    zk:
+      secret_key_kms_id: bdcb3f48f9ba2bbd78ccb5231d2670f66d8ffba57d50c095051d42c546e42911
+  edge:
+    backend:
+      max_dial_attempts_per_peer_per_message: 1
+      replication_factor: 1
+  abstain_on_failure: false
+cryptarchia:
+  service:
+    bootstrap:
+      prolonged_bootstrap_period: '3600.000000000'
+      force_bootstrap: false
+      offline_grace_period:
+        grace_period: '1200.000000000'
+        state_recording_interval: '60.000000000'
+    sync:
+      block_provider:
+        batch_size: 1000
+  network:
+    bootstrap:
+      ibd:
+        peers: []
+        delay_before_new_download:
+          secs: 10
+          nanos: 0
+        tips_fetch_max_attempts: 3
+        tips_fetch_min_delay:
+          secs: 0
+          nanos: 250000000
+        tips_fetch_max_delay:
+          secs: 1
+          nanos: 0
+        round_delay:
+          secs: 1
+          nanos: 0
+    sync:
+      orphan:
+        max_orphan_cache_size: 1000
+        max_rejected_cache_size: 1000
+      tip_poll:
+        enabled: true
+        lag_threshold_blocks: 3
+        max_peers_to_sample: 5
+    network:
+      max_connected_peers_to_try_download: 16
+      max_discovered_peers_to_try_download: 16
+  leader:
+    wallet:
+      max_tx_fee: 18446744073709551615
+      funding_pk: e8269b6124e767cc19334a866ec956c2752b9565c63e24974409a36598fae117
+time:
+  backend:
+    server: pool.ntp.org:123
+    client:
+      timeout: '5.000000000'
+      listening_interface: 0.0.0.0
+    update_interval: '15.000000000'
+sdp:
+  declaration_id: null
+  wallet:
+    max_tx_fee: 18446744073709551615
+    funding_pk: b142dec2c8db4f609de63c783676ee7f5995356805d414bb32ff9a6761b9ab0f
+  # active_message_tracker:
+  #   status_check_interval_in_tip_changes: 3
+  # ^ removed: as provided by the team, the logos-blockchain-node binary in
+  # the ':dst' image (and the public 0.2.4 release, which only warns) rejects
+  # this field as unrecognized. Kept here commented out for the team to confirm
+  # whether it's expected to exist / take effect on this build.
+api:
+  backend:
+    listen_address: 127.0.0.1:8080
+    cors_origins: []
+    timeout: 30
+    max_body_size: 10485760
+    max_concurrent_requests: 500
+storage:
+  backend:
+    folder_name: ./db
+    read_only: false
+    column_family: blocks
+kms:
+  backend:
+    keys:
+      8733679aef06258111de5fe92a7fc99049ecdfaf64458cacf3699d3cd3f5a32a: !Zk 5e373606131fc3d3bab5d1cfe87c05ea3c0f76117dd1231f01ce24fe75cded17
+      323dfdc2fa35e5621c51ecaa8a1a61c63e90283e97a4f93596540e5304361423: !Ed25519 09c1a9986547946a2ab62364f8fb908a5828820afd0ec99f26472bfb86b1f89a
+      e8269b6124e767cc19334a866ec956c2752b9565c63e24974409a36598fae117: !Zk 0643671dbf16226c21df69c32ebf6bc19f6cdce35ec3da141b737012fd131305
+      131e3fb72cc8fc1163f48e528413bf5eda937e5a1667c5dfa40322897982ab2e: !Ed25519 40d2832e4c06c8c3c53fcf61884143f2646f908c063b403778fe22f620df1de2
+      4c48a546292d792592cc07d146c7dd24e976acb1df350a78d52045e48047aa0e: !Zk c09896e5974af3ad6c0739380edb32eb1f99891e6a86130996ab457054781103
+      b142dec2c8db4f609de63c783676ee7f5995356805d414bb32ff9a6761b9ab0f: !Zk d41857c1c138954b9b92ffacdf89c60078b8bcfb1456c6976af4655adfdceb1c
+      1fe28fc07dd43355a6138e971423eb328d8d3aaae9ac1eb02e03fa3f8681402a: !Zk 9e2ee370a0d1afadbeedf57920c1c4c55dd0c0319f982b6f43a3dd9fe1a87918
+      bdcb3f48f9ba2bbd78ccb5231d2670f66d8ffba57d50c095051d42c546e42911: !Zk ebeaa651b18b9ee549cfd0bd7284df4405e1b6c8a18156ebc4af93519562502b
+wallet:
+  known_keys:
+    bdcb3f48f9ba2bbd78ccb5231d2670f66d8ffba57d50c095051d42c546e42911: bdcb3f48f9ba2bbd78ccb5231d2670f66d8ffba57d50c095051d42c546e42911
+    1fe28fc07dd43355a6138e971423eb328d8d3aaae9ac1eb02e03fa3f8681402a: 1fe28fc07dd43355a6138e971423eb328d8d3aaae9ac1eb02e03fa3f8681402a
+    e8269b6124e767cc19334a866ec956c2752b9565c63e24974409a36598fae117: e8269b6124e767cc19334a866ec956c2752b9565c63e24974409a36598fae117
+    4c48a546292d792592cc07d146c7dd24e976acb1df350a78d52045e48047aa0e: 4c48a546292d792592cc07d146c7dd24e976acb1df350a78d52045e48047aa0e
+    8733679aef06258111de5fe92a7fc99049ecdfaf64458cacf3699d3cd3f5a32a: 8733679aef06258111de5fe92a7fc99049ecdfaf64458cacf3699d3cd3f5a32a
+    b142dec2c8db4f609de63c783676ee7f5995356805d414bb32ff9a6761b9ab0f: b142dec2c8db4f609de63c783676ee7f5995356805d414bb32ff9a6761b9ab0f
+  voucher_master_key_id: 1fe28fc07dd43355a6138e971423eb328d8d3aaae9ac1eb02e03fa3f8681402a
+  pending_note_expiry_blocks: 10
+# pow:
+#   mining:
+#     max_threads: null
+#     max_tickets_per_block: 4
+#   auto_claim:
+#     targets: []
+#     tick:
+#       unit: seconds
+#       value: 300
+# ^ removed: same reason as active_message_tracker above — unrecognized by
+# this build's config schema (fatal on ':dst', warning-only on public 0.2.4).
+tracing:
+  logger:
+    file:
+      directory: .
+      prefix: '1788562677'
+      appender_type: !Rolling
+        rotation: Hourly
+        retention: !MaxFiles
+          max_files: 10
+        compression: None
+    loki: null
+    gelf: null
+    otlp: null
+    stdout: true
+    stderr: false
+  tracing: None
+  filter: !Env
+    filters:
+      opentelemetry_sdk: WARN
+      rustls: WARN
+      reqwest: WARN
+      hyper: WARN
+      libp2p_gossipsub: ERROR
+      logos_blockchain: INFO
+      hyper_util: WARN
+      '*': WARN
+      tonic: WARN
+      h2: WARN
+      tower: WARN
+      opentelemetry: WARN
+  metrics: None
+  console: None
+  level: INFO
+state:
+  base_folder: ./state

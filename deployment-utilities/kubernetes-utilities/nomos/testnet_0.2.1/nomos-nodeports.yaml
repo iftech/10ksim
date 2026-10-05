@@ -1,0 +1,2100 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-0-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: dst-node-0
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31000
+      targetPort: 31000
+      nodePort: 31000
+    - name: blend
+      protocol: UDP
+      port: 31001
+      targetPort: 31001
+      nodePort: 31001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-1-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-1
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31002
+      targetPort: 31002
+      nodePort: 31002
+    - name: blend
+      protocol: UDP
+      port: 31003
+      targetPort: 31003
+      nodePort: 31003
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-2-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-2
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31004
+      targetPort: 31004
+      nodePort: 31004
+    - name: blend
+      protocol: UDP
+      port: 31005
+      targetPort: 31005
+      nodePort: 31005
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-3-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-3
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31006
+      targetPort: 31006
+      nodePort: 31006
+    - name: blend
+      protocol: UDP
+      port: 31007
+      targetPort: 31007
+      nodePort: 31007
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-4-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-4
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31008
+      targetPort: 31008
+      nodePort: 31008
+    - name: blend
+      protocol: UDP
+      port: 31009
+      targetPort: 31009
+      nodePort: 31009
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-5-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-5
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31010
+      targetPort: 31010
+      nodePort: 31010
+    - name: blend
+      protocol: UDP
+      port: 31011
+      targetPort: 31011
+      nodePort: 31011
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-6-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-6
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31012
+      targetPort: 31012
+      nodePort: 31012
+    - name: blend
+      protocol: UDP
+      port: 31013
+      targetPort: 31013
+      nodePort: 31013
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-7-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-7
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31014
+      targetPort: 31014
+      nodePort: 31014
+    - name: blend
+      protocol: UDP
+      port: 31015
+      targetPort: 31015
+      nodePort: 31015
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-8-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-8
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31016
+      targetPort: 31016
+      nodePort: 31016
+    - name: blend
+      protocol: UDP
+      port: 31017
+      targetPort: 31017
+      nodePort: 31017
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-9-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-9
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31018
+      targetPort: 31018
+      nodePort: 31018
+    - name: blend
+      protocol: UDP
+      port: 31019
+      targetPort: 31019
+      nodePort: 31019
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-10-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-10
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31020
+      targetPort: 31020
+      nodePort: 31020
+    - name: blend
+      protocol: UDP
+      port: 31021
+      targetPort: 31021
+      nodePort: 31021
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-11-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-11
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31022
+      targetPort: 31022
+      nodePort: 31022
+    - name: blend
+      protocol: UDP
+      port: 31023
+      targetPort: 31023
+      nodePort: 31023
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-12-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-12
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31024
+      targetPort: 31024
+      nodePort: 31024
+    - name: blend
+      protocol: UDP
+      port: 31025
+      targetPort: 31025
+      nodePort: 31025
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-13-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-13
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31026
+      targetPort: 31026
+      nodePort: 31026
+    - name: blend
+      protocol: UDP
+      port: 31027
+      targetPort: 31027
+      nodePort: 31027
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-14-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-14
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31028
+      targetPort: 31028
+      nodePort: 31028
+    - name: blend
+      protocol: UDP
+      port: 31029
+      targetPort: 31029
+      nodePort: 31029
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-15-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-15
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31030
+      targetPort: 31030
+      nodePort: 31030
+    - name: blend
+      protocol: UDP
+      port: 31031
+      targetPort: 31031
+      nodePort: 31031
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-16-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-16
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31032
+      targetPort: 31032
+      nodePort: 31032
+    - name: blend
+      protocol: UDP
+      port: 31033
+      targetPort: 31033
+      nodePort: 31033
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-17-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-17
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31034
+      targetPort: 31034
+      nodePort: 31034
+    - name: blend
+      protocol: UDP
+      port: 31035
+      targetPort: 31035
+      nodePort: 31035
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-18-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-18
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31036
+      targetPort: 31036
+      nodePort: 31036
+    - name: blend
+      protocol: UDP
+      port: 31037
+      targetPort: 31037
+      nodePort: 31037
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-19-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-19
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31038
+      targetPort: 31038
+      nodePort: 31038
+    - name: blend
+      protocol: UDP
+      port: 31039
+      targetPort: 31039
+      nodePort: 31039
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-20-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-20
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31040
+      targetPort: 31040
+      nodePort: 31040
+    - name: blend
+      protocol: UDP
+      port: 31041
+      targetPort: 31041
+      nodePort: 31041
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-21-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-21
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31042
+      targetPort: 31042
+      nodePort: 31042
+    - name: blend
+      protocol: UDP
+      port: 31043
+      targetPort: 31043
+      nodePort: 31043
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-22-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-22
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31044
+      targetPort: 31044
+      nodePort: 31044
+    - name: blend
+      protocol: UDP
+      port: 31045
+      targetPort: 31045
+      nodePort: 31045
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-23-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-23
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31046
+      targetPort: 31046
+      nodePort: 31046
+    - name: blend
+      protocol: UDP
+      port: 31047
+      targetPort: 31047
+      nodePort: 31047
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-24-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-24
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31048
+      targetPort: 31048
+      nodePort: 31048
+    - name: blend
+      protocol: UDP
+      port: 31049
+      targetPort: 31049
+      nodePort: 31049
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-25-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-25
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31050
+      targetPort: 31050
+      nodePort: 31050
+    - name: blend
+      protocol: UDP
+      port: 31051
+      targetPort: 31051
+      nodePort: 31051
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-26-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-26
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31052
+      targetPort: 31052
+      nodePort: 31052
+    - name: blend
+      protocol: UDP
+      port: 31053
+      targetPort: 31053
+      nodePort: 31053
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-27-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-27
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31054
+      targetPort: 31054
+      nodePort: 31054
+    - name: blend
+      protocol: UDP
+      port: 31055
+      targetPort: 31055
+      nodePort: 31055
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-28-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-28
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31056
+      targetPort: 31056
+      nodePort: 31056
+    - name: blend
+      protocol: UDP
+      port: 31057
+      targetPort: 31057
+      nodePort: 31057
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-29-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-29
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31058
+      targetPort: 31058
+      nodePort: 31058
+    - name: blend
+      protocol: UDP
+      port: 31059
+      targetPort: 31059
+      nodePort: 31059
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-30-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-30
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31060
+      targetPort: 31060
+      nodePort: 31060
+    - name: blend
+      protocol: UDP
+      port: 31061
+      targetPort: 31061
+      nodePort: 31061
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-31-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-31
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31062
+      targetPort: 31062
+      nodePort: 31062
+    - name: blend
+      protocol: UDP
+      port: 31063
+      targetPort: 31063
+      nodePort: 31063
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-32-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-32
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31064
+      targetPort: 31064
+      nodePort: 31064
+    - name: blend
+      protocol: UDP
+      port: 31065
+      targetPort: 31065
+      nodePort: 31065
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-33-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-33
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31066
+      targetPort: 31066
+      nodePort: 31066
+    - name: blend
+      protocol: UDP
+      port: 31067
+      targetPort: 31067
+      nodePort: 31067
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-34-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-34
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31068
+      targetPort: 31068
+      nodePort: 31068
+    - name: blend
+      protocol: UDP
+      port: 31069
+      targetPort: 31069
+      nodePort: 31069
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-35-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-35
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31070
+      targetPort: 31070
+      nodePort: 31070
+    - name: blend
+      protocol: UDP
+      port: 31071
+      targetPort: 31071
+      nodePort: 31071
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-36-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-36
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31072
+      targetPort: 31072
+      nodePort: 31072
+    - name: blend
+      protocol: UDP
+      port: 31073
+      targetPort: 31073
+      nodePort: 31073
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-37-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-37
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31074
+      targetPort: 31074
+      nodePort: 31074
+    - name: blend
+      protocol: UDP
+      port: 31075
+      targetPort: 31075
+      nodePort: 31075
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-38-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-38
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31076
+      targetPort: 31076
+      nodePort: 31076
+    - name: blend
+      protocol: UDP
+      port: 31077
+      targetPort: 31077
+      nodePort: 31077
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-39-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-39
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31078
+      targetPort: 31078
+      nodePort: 31078
+    - name: blend
+      protocol: UDP
+      port: 31079
+      targetPort: 31079
+      nodePort: 31079
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-40-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-40
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31080
+      targetPort: 31080
+      nodePort: 31080
+    - name: blend
+      protocol: UDP
+      port: 31081
+      targetPort: 31081
+      nodePort: 31081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-41-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-41
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31082
+      targetPort: 31082
+      nodePort: 31082
+    - name: blend
+      protocol: UDP
+      port: 31083
+      targetPort: 31083
+      nodePort: 31083
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-42-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-42
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31084
+      targetPort: 31084
+      nodePort: 31084
+    - name: blend
+      protocol: UDP
+      port: 31085
+      targetPort: 31085
+      nodePort: 31085
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-43-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-43
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31086
+      targetPort: 31086
+      nodePort: 31086
+    - name: blend
+      protocol: UDP
+      port: 31087
+      targetPort: 31087
+      nodePort: 31087
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-44-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-44
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31088
+      targetPort: 31088
+      nodePort: 31088
+    - name: blend
+      protocol: UDP
+      port: 31089
+      targetPort: 31089
+      nodePort: 31089
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-45-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-45
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31090
+      targetPort: 31090
+      nodePort: 31090
+    - name: blend
+      protocol: UDP
+      port: 31091
+      targetPort: 31091
+      nodePort: 31091
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-46-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-46
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31092
+      targetPort: 31092
+      nodePort: 31092
+    - name: blend
+      protocol: UDP
+      port: 31093
+      targetPort: 31093
+      nodePort: 31093
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-47-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-47
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31094
+      targetPort: 31094
+      nodePort: 31094
+    - name: blend
+      protocol: UDP
+      port: 31095
+      targetPort: 31095
+      nodePort: 31095
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-48-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-48
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31096
+      targetPort: 31096
+      nodePort: 31096
+    - name: blend
+      protocol: UDP
+      port: 31097
+      targetPort: 31097
+      nodePort: 31097
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-49-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-49
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31098
+      targetPort: 31098
+      nodePort: 31098
+    - name: blend
+      protocol: UDP
+      port: 31099
+      targetPort: 31099
+      nodePort: 31099
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-50-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-50
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31100
+      targetPort: 31100
+      nodePort: 31100
+    - name: blend
+      protocol: UDP
+      port: 31101
+      targetPort: 31101
+      nodePort: 31101
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-51-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-51
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31102
+      targetPort: 31102
+      nodePort: 31102
+    - name: blend
+      protocol: UDP
+      port: 31103
+      targetPort: 31103
+      nodePort: 31103
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-52-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-52
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31104
+      targetPort: 31104
+      nodePort: 31104
+    - name: blend
+      protocol: UDP
+      port: 31105
+      targetPort: 31105
+      nodePort: 31105
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-53-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-53
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31106
+      targetPort: 31106
+      nodePort: 31106
+    - name: blend
+      protocol: UDP
+      port: 31107
+      targetPort: 31107
+      nodePort: 31107
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-54-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-54
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31108
+      targetPort: 31108
+      nodePort: 31108
+    - name: blend
+      protocol: UDP
+      port: 31109
+      targetPort: 31109
+      nodePort: 31109
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-55-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-55
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31110
+      targetPort: 31110
+      nodePort: 31110
+    - name: blend
+      protocol: UDP
+      port: 31111
+      targetPort: 31111
+      nodePort: 31111
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-56-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-56
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31112
+      targetPort: 31112
+      nodePort: 31112
+    - name: blend
+      protocol: UDP
+      port: 31113
+      targetPort: 31113
+      nodePort: 31113
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-57-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-57
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31114
+      targetPort: 31114
+      nodePort: 31114
+    - name: blend
+      protocol: UDP
+      port: 31115
+      targetPort: 31115
+      nodePort: 31115
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-58-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-58
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31116
+      targetPort: 31116
+      nodePort: 31116
+    - name: blend
+      protocol: UDP
+      port: 31117
+      targetPort: 31117
+      nodePort: 31117
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-59-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-59
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31118
+      targetPort: 31118
+      nodePort: 31118
+    - name: blend
+      protocol: UDP
+      port: 31119
+      targetPort: 31119
+      nodePort: 31119
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-60-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-60
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31120
+      targetPort: 31120
+      nodePort: 31120
+    - name: blend
+      protocol: UDP
+      port: 31121
+      targetPort: 31121
+      nodePort: 31121
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-61-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-61
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31122
+      targetPort: 31122
+      nodePort: 31122
+    - name: blend
+      protocol: UDP
+      port: 31123
+      targetPort: 31123
+      nodePort: 31123
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-62-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-62
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31124
+      targetPort: 31124
+      nodePort: 31124
+    - name: blend
+      protocol: UDP
+      port: 31125
+      targetPort: 31125
+      nodePort: 31125
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-63-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-63
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31126
+      targetPort: 31126
+      nodePort: 31126
+    - name: blend
+      protocol: UDP
+      port: 31127
+      targetPort: 31127
+      nodePort: 31127
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-64-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-64
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31128
+      targetPort: 31128
+      nodePort: 31128
+    - name: blend
+      protocol: UDP
+      port: 31129
+      targetPort: 31129
+      nodePort: 31129
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-65-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-65
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31130
+      targetPort: 31130
+      nodePort: 31130
+    - name: blend
+      protocol: UDP
+      port: 31131
+      targetPort: 31131
+      nodePort: 31131
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-66-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-66
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31132
+      targetPort: 31132
+      nodePort: 31132
+    - name: blend
+      protocol: UDP
+      port: 31133
+      targetPort: 31133
+      nodePort: 31133
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-67-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-67
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31134
+      targetPort: 31134
+      nodePort: 31134
+    - name: blend
+      protocol: UDP
+      port: 31135
+      targetPort: 31135
+      nodePort: 31135
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-68-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-68
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31136
+      targetPort: 31136
+      nodePort: 31136
+    - name: blend
+      protocol: UDP
+      port: 31137
+      targetPort: 31137
+      nodePort: 31137
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-69-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-69
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31138
+      targetPort: 31138
+      nodePort: 31138
+    - name: blend
+      protocol: UDP
+      port: 31139
+      targetPort: 31139
+      nodePort: 31139
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-70-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-70
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31140
+      targetPort: 31140
+      nodePort: 31140
+    - name: blend
+      protocol: UDP
+      port: 31141
+      targetPort: 31141
+      nodePort: 31141
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-71-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-71
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31142
+      targetPort: 31142
+      nodePort: 31142
+    - name: blend
+      protocol: UDP
+      port: 31143
+      targetPort: 31143
+      nodePort: 31143
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-72-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-72
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31144
+      targetPort: 31144
+      nodePort: 31144
+    - name: blend
+      protocol: UDP
+      port: 31145
+      targetPort: 31145
+      nodePort: 31145
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-73-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-73
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31146
+      targetPort: 31146
+      nodePort: 31146
+    - name: blend
+      protocol: UDP
+      port: 31147
+      targetPort: 31147
+      nodePort: 31147
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-74-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-74
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31148
+      targetPort: 31148
+      nodePort: 31148
+    - name: blend
+      protocol: UDP
+      port: 31149
+      targetPort: 31149
+      nodePort: 31149
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-75-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-75
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31150
+      targetPort: 31150
+      nodePort: 31150
+    - name: blend
+      protocol: UDP
+      port: 31151
+      targetPort: 31151
+      nodePort: 31151
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-76-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-76
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31152
+      targetPort: 31152
+      nodePort: 31152
+    - name: blend
+      protocol: UDP
+      port: 31153
+      targetPort: 31153
+      nodePort: 31153
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-77-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-77
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31154
+      targetPort: 31154
+      nodePort: 31154
+    - name: blend
+      protocol: UDP
+      port: 31155
+      targetPort: 31155
+      nodePort: 31155
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-78-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-78
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31156
+      targetPort: 31156
+      nodePort: 31156
+    - name: blend
+      protocol: UDP
+      port: 31157
+      targetPort: 31157
+      nodePort: 31157
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-79-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-79
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31158
+      targetPort: 31158
+      nodePort: 31158
+    - name: blend
+      protocol: UDP
+      port: 31159
+      targetPort: 31159
+      nodePort: 31159
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-80-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-80
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31160
+      targetPort: 31160
+      nodePort: 31160
+    - name: blend
+      protocol: UDP
+      port: 31161
+      targetPort: 31161
+      nodePort: 31161
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-81-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-81
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31162
+      targetPort: 31162
+      nodePort: 31162
+    - name: blend
+      protocol: UDP
+      port: 31163
+      targetPort: 31163
+      nodePort: 31163
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-82-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-82
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31164
+      targetPort: 31164
+      nodePort: 31164
+    - name: blend
+      protocol: UDP
+      port: 31165
+      targetPort: 31165
+      nodePort: 31165
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-83-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-83
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31166
+      targetPort: 31166
+      nodePort: 31166
+    - name: blend
+      protocol: UDP
+      port: 31167
+      targetPort: 31167
+      nodePort: 31167
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-84-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-84
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31168
+      targetPort: 31168
+      nodePort: 31168
+    - name: blend
+      protocol: UDP
+      port: 31169
+      targetPort: 31169
+      nodePort: 31169
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-85-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-85
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31170
+      targetPort: 31170
+      nodePort: 31170
+    - name: blend
+      protocol: UDP
+      port: 31171
+      targetPort: 31171
+      nodePort: 31171
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-86-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-86
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31172
+      targetPort: 31172
+      nodePort: 31172
+    - name: blend
+      protocol: UDP
+      port: 31173
+      targetPort: 31173
+      nodePort: 31173
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-87-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-87
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31174
+      targetPort: 31174
+      nodePort: 31174
+    - name: blend
+      protocol: UDP
+      port: 31175
+      targetPort: 31175
+      nodePort: 31175
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-88-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-88
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31176
+      targetPort: 31176
+      nodePort: 31176
+    - name: blend
+      protocol: UDP
+      port: 31177
+      targetPort: 31177
+      nodePort: 31177
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-89-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-89
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31178
+      targetPort: 31178
+      nodePort: 31178
+    - name: blend
+      protocol: UDP
+      port: 31179
+      targetPort: 31179
+      nodePort: 31179
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-90-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-90
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31180
+      targetPort: 31180
+      nodePort: 31180
+    - name: blend
+      protocol: UDP
+      port: 31181
+      targetPort: 31181
+      nodePort: 31181
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-91-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-91
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31182
+      targetPort: 31182
+      nodePort: 31182
+    - name: blend
+      protocol: UDP
+      port: 31183
+      targetPort: 31183
+      nodePort: 31183
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-92-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-92
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31184
+      targetPort: 31184
+      nodePort: 31184
+    - name: blend
+      protocol: UDP
+      port: 31185
+      targetPort: 31185
+      nodePort: 31185
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-93-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-93
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31186
+      targetPort: 31186
+      nodePort: 31186
+    - name: blend
+      protocol: UDP
+      port: 31187
+      targetPort: 31187
+      nodePort: 31187
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-94-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-94
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31188
+      targetPort: 31188
+      nodePort: 31188
+    - name: blend
+      protocol: UDP
+      port: 31189
+      targetPort: 31189
+      nodePort: 31189
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-95-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-95
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31190
+      targetPort: 31190
+      nodePort: 31190
+    - name: blend
+      protocol: UDP
+      port: 31191
+      targetPort: 31191
+      nodePort: 31191
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-96-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-96
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31192
+      targetPort: 31192
+      nodePort: 31192
+    - name: blend
+      protocol: UDP
+      port: 31193
+      targetPort: 31193
+      nodePort: 31193
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-97-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-97
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31194
+      targetPort: 31194
+      nodePort: 31194
+    - name: blend
+      protocol: UDP
+      port: 31195
+      targetPort: 31195
+      nodePort: 31195
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-98-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-98
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31196
+      targetPort: 31196
+      nodePort: 31196
+    - name: blend
+      protocol: UDP
+      port: 31197
+      targetPort: 31197
+      nodePort: 31197
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-99-nodeport
+  namespace: nomos-testnet
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-99
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 31198
+      targetPort: 31198
+      nodePort: 31198
+    - name: blend
+      protocol: UDP
+      port: 31199
+      targetPort: 31199
+      nodePort: 31199
+---

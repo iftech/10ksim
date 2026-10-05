@@ -1,8 +1,294 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nomos-deployment-settings
+  namespace: nomos-devnet
+data:
+  settings.yaml: |
+    blend:
+      common:
+        num_blend_layers: 1
+        minimum_network_size: 2
+        protocol_name: /logos-blockchain-devnet-0.2.1-rc.3/blend/1.0.0
+        data_replication_factor: 1
+      core:
+        scheduler:
+          cover:
+            message_frequency_per_round: 1.0
+          delayer:
+            maximum_release_delay_in_rounds: 1
+        minimum_messages_coefficient: 1
+        normalization_constant: 1.03
+        activity_threshold_sensitivity: 1
+    network:
+      kademlia_protocol_name: /logos-blockchain-devnet-0.2.1-rc.3/kad/1.0.0
+      identify_protocol_name: /logos-blockchain-devnet-0.2.1-rc.3/identify/1.0.0
+      chain_sync_protocol_name: /logos-blockchain-devnet-0.2.1-rc.3/chainsync/1.0.0
+    cryptarchia:
+      epoch_config:
+        epoch_stake_distribution_stabilization: 3
+        epoch_period_nonce_buffer: 3
+        epoch_period_nonce_stabilization: 4
+      security_param: 120
+      slot_activation_coeff:
+        numerator: 1
+        denominator: 30
+      learning_rate: 1.0
+      sdp_config:
+        service_params:
+          BN:
+            inactivity_period: 2
+            epoch: 0
+        min_stake:
+          threshold: 1
+          timestamp: 0
+      gossipsub_protocol: /logos-blockchain-devnet-0.2.1-rc.3/cryptarchia/1.0.0
+      genesis_block:
+        header:
+          version: Bedrock
+          parent_block: '0000000000000000000000000000000000000000000000000000000000000000'
+          slot: 0
+          block_root: '564eea712e5daa51303b57ff16bedc371853f3a0a3c8b60a2aaf425722b1a84f'
+          proof_of_leadership:
+            proof: '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+            entropy_contribution: '0000000000000000000000000000000000000000000000000000000000000000'
+            leader_key: '0000000000000000000000000000000000000000000000000000000000000000'
+            voucher_cm: '0000000000000000000000000000000000000000000000000000000000000000'
+        signature: '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+        transactions:
+        - mantle_tx:
+            ops:
+            - opcode: 0
+              payload:
+                inputs: []
+                outputs:
+                - value: 100000
+                  pk: '62c84f14ee182e0daade80fb62dd3d8fd574ea68ebd0ba66f680aecb96345b29'
+                - value: 200000
+                  pk: e3752c1d69ab82d4b2f60aeec185eeed729d418fc07191e4d14bbaa9fa546a16
+                - value: 200000
+                  pk: '941201a4509c64cbe5ce994f23c3bdc53d6e2ba03ca6bab8196116be3896eb0f'
+                - value: 1
+                  pk: daebceddc9ef45acd72a7ca35f3d2d1c74e207eda6e274a4ca360159de8e0210
+                - value: 100000
+                  pk: '918b04708fc209af93bd425fa6f7b1f46c1a185b25e8d6861139e2c458f55a05'
+                - value: 200000
+                  pk: '7edef6fb1b78278e387e057e46998067e3e12ee55ccf3bff5577be04d553eb1e'
+                - value: 200000
+                  pk: b541e4699a309096e01753703b1a7ad4e58d877b9a61c451b846446f3f387f27
+                - value: 1
+                  pk: dc9803310f8ea8571723c6e3e568ff0d6bb81eccd28777ed99fc1a4f68cf0400
+                - value: 100000
+                  pk: '60f5f3dc232743afde0998d4e9b05e293e52d58deb85cfb1330174f69fa7322f'
+                - value: 200000
+                  pk: da81f09bee68872b38366789387c3d33377f3e66fdef3b293579af53374fa708
+                - value: 200000
+                  pk: '988ff525200e7910b3c8af9abb2b945aeb2b8d6dab6f702c63326a0c0c7bc304'
+                - value: 1
+                  pk: '8a9f02e0c130a6ee1a86ec4bd76ceef2e2c37e733f3efc4e256eec96df6d352a'
+                - value: 100000
+                  pk: '6ef994707f2fd705e8b39b54aa2a42c8580b594bb8fe6cc80042524dc2e06621'
+                - value: 200000
+                  pk: '94f9afc599dee8c16c7ed64f422fbdd62c1277c13973afe2b3c032c669d74e16'
+                - value: 200000
+                  pk: '88b9456889510dcfcd27172ef0d834ab3e9d87c79629c5fe8724d8197843ec1e'
+                - value: 1
+                  pk: '8362830159cc5f0967936720a0f5c4990339c6c4b7b5f53efac848e2a66e2007'
+                - value: 18446744073709551615
+                  pk: '3956ddb6ed8cb0b002f9839bfecd1d31f852594b46c3dee8d72df926be3bb625'
+            - opcode: 17
+              payload:
+                channel_id: '0000000000000000000000000000000000000000000000000000000000000000'
+                inscription: '0a302e322e312d72632e3360076a6a2d2ddf918544bca603c5a291c7dd1b902d6769ff4b00021506780e075c06051a'
+                parent: '0000000000000000000000000000000000000000000000000000000000000000'
+                signer: '0000000000000000000000000000000000000000000000000000000000000000'
+            - opcode: 32
+              payload:
+                service_type: BN
+                locators:
+                - /ip4/65.108.203.235/udp/3400/quic-v1
+                provider_id: '5818cc65db81aeedc499082d5d2320d0174a3b7b04191191153da535ca753cdf'
+                zk_id: daebceddc9ef45acd72a7ca35f3d2d1c74e207eda6e274a4ca360159de8e0210
+                locked_note_id: '65668a98a5fcc68adf08bdb5862c0cc09b05a3f3ee217fd0567db5e1d9afe81d'
+            - opcode: 32
+              payload:
+                service_type: BN
+                locators:
+                - /ip4/65.108.203.235/udp/3401/quic-v1
+                provider_id: '188245c021abfe362c07d3aa887d727dc45828d5d7d94de7843ed56c5c738aee'
+                zk_id: dc9803310f8ea8571723c6e3e568ff0d6bb81eccd28777ed99fc1a4f68cf0400
+                locked_note_id: '95bd992e15209c88921f7cd1b2ffde1027c545b2d02d3290a4cb9853c7d62d03'
+            - opcode: 32
+              payload:
+                service_type: BN
+                locators:
+                - /isettings.yaml: |
+    blend:
+      common:
+        num_blend_layers: 1
+        minimum_network_size: 2
+        protocol_name: /logos-blockchain-devnet-0.2.1-rc.3/blend/1.0.0
+        data_replication_factor: 1
+      core:
+        scheduler:
+          cover:
+            message_frequency_per_round: 1.0
+          delayer:
+            maximum_release_delay_in_rounds: 1
+        minimum_messages_coefficient: 1
+        normalization_constant: 1.03
+        activity_threshold_sensitivity: 1
+    network:
+      kademlia_protocol_name: /logos-blockchain-devnet-0.2.1-rc.3/kad/1.0.0
+      identify_protocol_name: /logos-blockchain-devnet-0.2.1-rc.3/identify/1.0.0
+      chain_sync_protocol_name: /logos-blockchain-devnet-0.2.1-rc.3/chainsync/1.0.0
+    cryptarchia:
+      epoch_config:
+        epoch_stake_distribution_stabilization: 3
+        epoch_period_nonce_buffer: 3
+        epoch_period_nonce_stabilization: 4
+      security_param: 120
+      slot_activation_coeff:
+        numerator: 1
+        denominator: 30
+      learning_rate: 1.0
+      sdp_config:
+        service_params:
+          BN:
+            inactivity_period: 2
+            epoch: 0
+        min_stake:
+          threshold: 1
+          timestamp: 0
+      gossipsub_protocol: /logos-blockchain-devnet-0.2.1-rc.3/cryptarchia/1.0.0
+      genesis_block:
+        header:
+          version: Bedrock
+          parent_block: '0000000000000000000000000000000000000000000000000000000000000000'
+          slot: 0
+          block_root: '564eea712e5daa51303b57ff16bedc371853f3a0a3c8b60a2aaf425722b1a84f'
+          proof_of_leadership:
+            proof: '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+            entropy_contribution: '0000000000000000000000000000000000000000000000000000000000000000'
+            leader_key: '0000000000000000000000000000000000000000000000000000000000000000'
+            voucher_cm: '0000000000000000000000000000000000000000000000000000000000000000'
+        signature: '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+        transactions:
+        - mantle_tx:
+            ops:
+            - opcode: 0
+              payload:
+                inputs: []
+                outputs:
+                - value: 100000
+                  pk: '62c84f14ee182e0daade80fb62dd3d8fd574ea68ebd0ba66f680aecb96345b29'
+                - value: 200000
+                  pk: e3752c1d69ab82d4b2f60aeec185eeed729d418fc07191e4d14bbaa9fa546a16
+                - value: 200000
+                  pk: '941201a4509c64cbe5ce994f23c3bdc53d6e2ba03ca6bab8196116be3896eb0f'
+                - value: 1
+                  pk: daebceddc9ef45acd72a7ca35f3d2d1c74e207eda6e274a4ca360159de8e0210
+                - value: 100000
+                  pk: '918b04708fc209af93bd425fa6f7b1f46c1a185b25e8d6861139e2c458f55a05'
+                - value: 200000
+                  pk: '7edef6fb1b78278e387e057e46998067e3e12ee55ccf3bff5577be04d553eb1e'
+                - value: 200000
+                  pk: b541e4699a309096e01753703b1a7ad4e58d877b9a61c451b846446f3f387f27
+                - value: 1
+                  pk: dc9803310f8ea8571723c6e3e568ff0d6bb81eccd28777ed99fc1a4f68cf0400
+                - value: 100000
+                  pk: '60f5f3dc232743afde0998d4e9b05e293e52d58deb85cfb1330174f69fa7322f'
+                - value: 200000
+                  pk: da81f09bee68872b38366789387c3d33377f3e66fdef3b293579af53374fa708
+                - value: 200000
+                  pk: '988ff525200e7910b3c8af9abb2b945aeb2b8d6dab6f702c63326a0c0c7bc304'
+                - value: 1
+                  pk: '8a9f02e0c130a6ee1a86ec4bd76ceef2e2c37e733f3efc4e256eec96df6d352a'
+                - value: 100000
+                  pk: '6ef994707f2fd705e8b39b54aa2a42c8580b594bb8fe6cc80042524dc2e06621'
+                - value: 200000
+                  pk: '94f9afc599dee8c16c7ed64f422fbdd62c1277c13973afe2b3c032c669d74e16'
+                - value: 200000
+                  pk: '88b9456889510dcfcd27172ef0d834ab3e9d87c79629c5fe8724d8197843ec1e'
+                - value: 1
+                  pk: '8362830159cc5f0967936720a0f5c4990339c6c4b7b5f53efac848e2a66e2007'
+                - value: 18446744073709551615
+                  pk: '3956ddb6ed8cb0b002f9839bfecd1d31f852594b46c3dee8d72df926be3bb625'
+            - opcode: 17
+              payload:
+                channel_id: '0000000000000000000000000000000000000000000000000000000000000000'
+                inscription: '0a302e322e312d72632e3360076a6a2d2ddf918544bca603c5a291c7dd1b902d6769ff4b00021506780e075c06051a'
+                parent: '0000000000000000000000000000000000000000000000000000000000000000'
+                signer: '0000000000000000000000000000000000000000000000000000000000000000'
+            - opcode: 32
+              payload:
+                service_type: BN
+                locators:
+                - /ip4/65.108.203.235/udp/3400/quic-v1
+                provider_id: '5818cc65db81aeedc499082d5d2320d0174a3b7b04191191153da535ca753cdf'
+                zk_id: daebceddc9ef45acd72a7ca35f3d2d1c74e207eda6e274a4ca360159de8e0210
+                locked_note_id: '65668a98a5fcc68adf08bdb5862c0cc09b05a3f3ee217fd0567db5e1d9afe81d'
+            - opcode: 32
+              payload:
+                service_type: BN
+                locators:
+                - /ip4/65.108.203.235/udp/3401/quic-v1
+                provider_id: '188245c021abfe362c07d3aa887d727dc45828d5d7d94de7843ed56c5c738aee'
+                zk_id: dc9803310f8ea8571723c6e3e568ff0d6bb81eccd28777ed99fc1a4f68cf0400
+                locked_note_id: '95bd992e15209c88921f7cd1b2ffde1027c545b2d02d3290a4cb9853c7d62d03'
+            - opcodep4/65.108.203.235/udp/3402/quic-v1
+                provider_id: '7eef1970220c1ebbb7ecfde7a1402a1c1dd56f887c19b54f074f42414a14080f'
+                zk_id: '8a9f02e0c130a6ee1a86ec4bd76ceef2e2c37e733f3efc4e256eec96df6d352a'
+                locked_note_id: '35939ef62bea622f1e4428184ca5f6441f54185d4e6f1ae7938e67474779ec25'
+            - opcode: 32
+              payload:
+                service_type: BN
+                locators:
+                - /ip4/65.108.203.235/udp/50002/quic-v1
+                provider_id: '015e73fefc8b54813f28636293edd83cd9b3384830e7dd483e58502ab399c00e'
+                zk_id: '8362830159cc5f0967936720a0f5c4990339c6c4b7b5f53efac848e2a66e2007'
+                locked_note_id: '6bcf8f3aed17345d946ea699f67f6fa462ad90cba908df998a001d412c340713'
+          ops_proofs:
+          - !ZkSig
+            pi_a: '0000000000000000000000000000000000000000000000000000000000000000'
+            pi_b: '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+            pi_c: '0000000000000000000000000000000000000000000000000000000000000000'
+          - !Ed25519Sig '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+          - !ZkAndEd25519Sigs
+            zk_sig:
+              pi_a: '0000000000000000000000000000000000000000000000000000000000000000'
+              pi_b: '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+              pi_c: '0000000000000000000000000000000000000000000000000000000000000000'
+            ed25519_sig: '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+          - !ZkAndEd25519Sigs
+            zk_sig:
+              pi_a: '0000000000000000000000000000000000000000000000000000000000000000'
+              pi_b: '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+              pi_c: '0000000000000000000000000000000000000000000000000000000000000000'
+            ed25519_sig: '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+          - !ZkAndEd25519Sigs
+            zk_sig:
+              pi_a: '0000000000000000000000000000000000000000000000000000000000000000'
+              pi_b: '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+              pi_c: '0000000000000000000000000000000000000000000000000000000000000000'
+            ed25519_sig: '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+          - !ZkAndEd25519Sigs
+            zk_sig:
+              pi_a: '0000000000000000000000000000000000000000000000000000000000000000'
+              pi_b: '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+              pi_c: '0000000000000000000000000000000000000000000000000000000000000000'
+            ed25519_sig: '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+      faucet_pk: '3956ddb6ed8cb0b002f9839bfecd1d31f852594b46c3dee8d72df926be3bb625'
+    time:
+      slot_duration: '1.000000000'
+    mempool:
+      pubsub_topic: /logos-blockchain-devnet-0.2.1-rc.3/mempool/1.0.0
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: dst-node
-  namespace: nomos-testnet
+  namespace: nomos-devnet
 spec:
   replicas: 1
   persistentVolumeClaimRetentionPolicy:
@@ -23,9 +309,20 @@ spec:
           labelSelector:
             matchLabels:
               app: nomos
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: nomos
+              topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: deployment-settings
+          configMap:
+            name: nomos-deployment-settings
       containers:
         - name: nomos
-          image: soutullostatus/logos-core-blockchain:v0.2.1
+          image: ghcr.io/logos-blockchain/logos-blockchain:0.2.2-dst-block-tracing
           imagePullPolicy: Always
           resources:
             requests:
@@ -39,22 +336,24 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
+            - name: OTEL_CLIENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: otel-client-token
+                  key: token
           volumeMounts:
             - name: nomos-data
               mountPath: /state
+            - name: deployment-settings
+              mountPath: /etc/logos-blockchain
+              readOnly: true
           readinessProbe:
             exec:
               command:
                 - /bin/sh
                 - -c
                 - |
-                  logoscore call blockchain_module get_cryptarchia_info \
-                    | jq -r '.result.value' \
-                    | jq -e '
-                        .cryptarchia_info.state == "Online"
-                        or .mode == "Online"
-                        or .mode.Started == "Online"
-                      '
+                  curl -fsS http://localhost:8080/cryptarchia/info | grep -q '"state":"Online"'
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 3
@@ -65,47 +364,26 @@ spec:
             - |
               set -eu
               ORD="${HOSTNAME##*-}"
-              BASE=31000
+              BASE=32000
               SWARM=$((BASE + 2*ORD))
               BLEND=$((SWARM + 1))
-              LOGOS_MODULES_DIR="${LOGOS_MODULES_DIR:-/opt/logos/modules}"
-
-              logoscore -m "${LOGOS_MODULES_DIR}" -D &
-              LOGOSCORE_PID="$!"
-
-              cleanup() {
-                kill "${LOGOSCORE_PID}" 2>/dev/null || true
-                wait "${LOGOSCORE_PID}" 2>/dev/null || true
-              }
-              trap cleanup TERM INT
-
-              until [ -f /root/.logoscore/client/config.json ]; do
-                echo "Waiting for logoscore daemon client config"
-                sleep 1
-              done
-
-              until logoscore load-module blockchain_module; do
-                echo "Waiting for logoscore daemon to load blockchain_module"
-                logoscore list-modules || true
-                logoscore status || true
-                sleep 2
-              done
 
               if [ ! -f /state/user_config.yaml ]; then
                 echo "user_config.yaml not found, initializing node"
                 GENERATED_CONFIG=/user_config.yaml
                 GENERATED_KEYSTORE=/keystore.yaml
 
-                logoscore call blockchain_module generate_user_config \
-                  '{
-                    "initial_peers": [
-                      "/ip4/65.109.51.37/udp/3000/quic-v1/p2p/12D3KooWFrouXfmrR4nsLMtE7wu15DoMJ6VtoUtHinREZCvbWHar",
-                      "/ip4/65.109.51.37/udp/3001/quic-v1/p2p/12D3KooWJRGau8M1rjT7R5e4YYsgdFhsMX35nRDtMwCDjxQkXAHz",
-                      "/ip4/65.109.51.37/udp/3002/quic-v1/p2p/12D3KooWQXJavMDTRscjauFSgVAB1VLB6Rzpy2uY5SU9Tk7927tb",
-                      "/ip4/65.109.51.37/udp/50001/quic-v1/p2p/12D3KooWSQc7CcGtvWDPF1yCbBthFnQjprfCVHmfmNDUrSmqQsU1"
-                    ]
-                  }' \
-                  --external-address "/ip4/${HOST_IP}/udp/${SWARM}/quic-v1"
+                logos-blockchain-node init-config \
+                  -o "${GENERATED_CONFIG}" \
+                  -k "${GENERATED_KEYSTORE}" \
+                  --state-path /state \
+                  --net-port "${SWARM}" \
+                  --blend-addr "/ip4/0.0.0.0/udp/${BLEND}/quic-v1" \
+                  --external-address "/ip4/${HOST_IP}/udp/${SWARM}/quic-v1" \
+                  -p /ip4/65.109.51.37/udp/3000/quic-v1/p2p/12D3KooWFrouXfmrR4nsLMtE7wu15DoMJ6VtoUtHinREZCvbWHar \
+                  -p /ip4/65.109.51.37/udp/3001/quic-v1/p2p/12D3KooWJRGau8M1rjT7R5e4YYsgdFhsMX35nRDtMwCDjxQkXAHz \
+                  -p /ip4/65.109.51.37/udp/3002/quic-v1/p2p/12D3KooWQXJavMDTRscjauFSgVAB1VLB6Rzpy2uY5SU9Tk7927tb \
+                  -p /ip4/65.109.51.37/udp/50001/quic-v1/p2p/12D3KooWSQc7CcGtvWDPF1yCbBthFnQjprfCVHmfmNDUrSmqQsU1 \
 
                 if [ ! -f "${GENERATED_CONFIG}" ]; then
                   echo "Could not find generated config at ${GENERATED_CONFIG}"
@@ -113,6 +391,15 @@ spec:
                 fi
 
                 awk '
+                  skip {
+                    if (match($0, /^[[:space:]]*/) && RLENGTH > 4) next
+                    skip = 0
+                  }
+                  /^    file:$/ {
+                    print "    file: null"
+                    skip = 1
+                    next
+                  }
                   /^  metrics: None$/ {
                     print "  metrics: !Otlp"
                     print "    endpoint: \"http://otlp.lab.vac.dev:31317/\""
@@ -121,29 +408,17 @@ spec:
                     print "    authorization_header: \"Bearer " ENVIRON["OTEL_CLIENT_TOKEN"] "\""
                     next
                   }
-                  { print }
-                ' "${GENERATED_CONFIG}" > "${GENERATED_CONFIG}.tmp" && mv "${GENERATED_CONFIG}.tmp" "${GENERATED_CONFIG}"
-
-                awk -v swarm="${SWARM}" -v blend="${BLEND}" '
-                  /^[[:space:]]*net_port:[[:space:]]*/ {
-                    indent = substr($0, 1, match($0, /[^[:space:]]/) - 1)
-                    print indent "net_port: " swarm
-                    next
-                  }
-                  /^[[:space:]]*blend_addr:[[:space:]]*/ {
-                    indent = substr($0, 1, match($0, /[^[:space:]]/) - 1)
-                    print indent "blend_addr: \"/ip4/0.0.0.0/udp/" blend "/quic-v1\""
+                  /^  tracing: None$/ {
+                    print "  tracing: !Otlp"
+                    print "    endpoint: \"http://otlp.lab.vac.dev:31317/\""
+                    print "    protocol: \"Grpc\""
+                    print "    service_name: \"" ENVIRON["HOSTNAME"] "\""
+                    print "    authorization_header: \"Bearer " ENVIRON["OTEL_CLIENT_TOKEN"] "\""
+                    print "    sample_ratio: 1.0"
                     next
                   }
                   { print }
                 ' "${GENERATED_CONFIG}" > "${GENERATED_CONFIG}.tmp" && mv "${GENERATED_CONFIG}.tmp" "${GENERATED_CONFIG}"
-
-                sed -i '/^[[:space:]]*file:[[:space:]]*$/{
-                N
-                N
-                N
-                s|^[[:space:]]*file:[[:space:]]*$\n[[:space:]]*directory: .*$\n[[:space:]]*prefix: .*$\n[[:space:]]*appender_type: .*$|    file: null|
-                }' "${GENERATED_CONFIG}"
 
                 mv "${GENERATED_CONFIG}" /state/user_config.yaml
                 if [ -f "${GENERATED_KEYSTORE}" ]; then
@@ -153,8 +428,7 @@ spec:
                 echo "Using existing /state/user_config.yaml"
               fi
 
-              logoscore call blockchain_module start /state/user_config.yaml ""
-              wait "${LOGOSCORE_PID}"
+              exec logos-blockchain-node /state/user_config.yaml
         - name: blend-declaration
           image: docker.io/library/alpine:3.20
           imagePullPolicy: Always
@@ -179,7 +453,7 @@ spec:
               apk add --no-cache curl jq yq
           
               ORD="${HOSTNAME##*-}"
-              BASE=31000
+              BASE=32000
               SWARM=$((BASE + 2 * ORD))
               BLEND=$((SWARM + 1))
           

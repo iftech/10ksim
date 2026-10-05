@@ -1,0 +1,16 @@
+# Reference: bootstrap addresses for the 10 genesis initial peers (nomos-initial-0..9)
+# on node-02.ih-eu-mda1.misc.vaclab, reachable via the swarm NodePort Services in
+# nomos-nodeports.yaml (agreed port list: 32222-32231, one per node).
+# Used both by the initial peers' own user_config.yaml (initial_peers, minus self)
+# and as the -p bootstrap args for later-joining 'normal' nodes (see joiner-statefulset.yaml).
+initial_peers:
+  - /ip4/185.181.228.123/udp/32222/quic-v1/p2p/12D3KooWSDozCCyu58DX48RDPHBWqDXkogXZqEtBJrS9QXNuuptk
+  - /ip4/185.181.228.123/udp/32223/quic-v1/p2p/12D3KooWQkUwh3FPjZmkBQi5L46P8kTDYWyatxSh7wVfLoPQ56uy
+  - /ip4/185.181.228.123/udp/32224/quic-v1/p2p/12D3KooWQUuQwRxkYHo9KhQ6yycBSw6KqpyKc5atr22QnE8ZRoUF
+  - /ip4/185.181.228.123/udp/32225/quic-v1/p2p/12D3KooWDnJNm4v414AQQGYHLukW8wHdFdf9NFPUSswZMqEJWj2H
+  - /ip4/185.181.228.123/udp/32226/quic-v1/p2p/12D3KooWKjyUoJfV7YRzgbXEiWH2q2bq55XVTupu4P1mbjADyoLG
+  - /ip4/185.181.228.123/udp/32227/quic-v1/p2p/12D3KooWP5TTTSxy8d5EzHinUzHGuNN48RUbdFC3Ycrzj3FPrjVu
+  - /ip4/185.181.228.123/udp/32228/quic-v1/p2p/12D3KooWLqAHSNaCnuTkFYejzXj4VqArLNuZQYjkJcdfBzi8DupZ
+  - /ip4/185.181.228.123/udp/32229/quic-v1/p2p/12D3KooWCN7LMfjEuEtuaEYzpU9aQz37Cy8FdLz9EPzi5o86JuT6
+  - /ip4/185.181.228.123/udp/32230/quic-v1/p2p/12D3KooWEFGYzRK6daVdTHq5RMLJ4GSUGkXFU91c6VUWVPtZTxg4
+  - /ip4/185.181.228.123/udp/32231/quic-v1/p2p/12D3KooWDCVNwUg8EvGPFpN7r1wvSnJv2Lvt92cm5B7DiG7UKNpA

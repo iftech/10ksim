@@ -1,0 +1,156 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nomos-joiner
+  namespace: nomos-testbed
+spec:
+  serviceName: nomos-joiner
+  replicas: 5
+  podManagementPolicy: Parallel
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app: nomos
+      pool: joiner
+  template:
+    metadata:
+      labels:
+        app: nomos
+        pool: joiner
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: nomos
+              pool: joiner
+      containers:
+        - name: nomos
+          image: ghcr.io/logos-blockchain/logos-blockchain:dst
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: "1024Mi"
+              cpu: "1000m"
+            limits:
+              memory: "4096Mi"
+              cpu: "2000m"
+          env:
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_CLIENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: otel-client-token
+                  key: token
+          volumeMounts:
+            - name: nomos-data
+              mountPath: /state
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  curl -fsS http://localhost:8080/cryptarchia/info | grep -q '"state":"Online"'
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          command: ["/bin/sh", "-c"]
+          workingDir: /
+          args:
+            # Joiner nodes are not part of the genesis block: each generates its own
+            # identity on first start and bootstraps against the 10 fixed initial
+            # peers (see initial_peers.yaml). No faucet/SDP-declare step is run here
+            # since these nodes only need to sync, not act as funded validators.
+            - |
+              set -eu
+              ORD="${HOSTNAME##*-}"
+              BASE=32400
+              SWARM=$((BASE + 2*ORD))
+              BLEND=$((SWARM + 1))
+
+              if [ ! -f /state/user_config.yaml ]; then
+                echo "user_config.yaml not found, initializing joiner node"
+                GENERATED_CONFIG=/user_config.yaml
+                GENERATED_KEYSTORE=/keystore.yaml
+
+                logos-blockchain-node init-config \
+                  -o "${GENERATED_CONFIG}" \
+                  -k "${GENERATED_KEYSTORE}" \
+                  --state-path /state \
+                  --net-port "${SWARM}" \
+                  --blend-addr "/ip4/0.0.0.0/udp/${BLEND}/quic-v1" \
+                  --external-address "/ip4/${HOST_IP}/udp/${SWARM}/quic-v1" \
+                  -p /ip4/185.181.228.123/udp/32222/quic-v1/p2p/12D3KooWSDozCCyu58DX48RDPHBWqDXkogXZqEtBJrS9QXNuuptk \
+                  -p /ip4/185.181.228.123/udp/32223/quic-v1/p2p/12D3KooWQkUwh3FPjZmkBQi5L46P8kTDYWyatxSh7wVfLoPQ56uy \
+                  -p /ip4/185.181.228.123/udp/32224/quic-v1/p2p/12D3KooWQUuQwRxkYHo9KhQ6yycBSw6KqpyKc5atr22QnE8ZRoUF \
+                  -p /ip4/185.181.228.123/udp/32225/quic-v1/p2p/12D3KooWDnJNm4v414AQQGYHLukW8wHdFdf9NFPUSswZMqEJWj2H \
+                  -p /ip4/185.181.228.123/udp/32226/quic-v1/p2p/12D3KooWKjyUoJfV7YRzgbXEiWH2q2bq55XVTupu4P1mbjADyoLG \
+                  -p /ip4/185.181.228.123/udp/32227/quic-v1/p2p/12D3KooWP5TTTSxy8d5EzHinUzHGuNN48RUbdFC3Ycrzj3FPrjVu \
+                  -p /ip4/185.181.228.123/udp/32228/quic-v1/p2p/12D3KooWLqAHSNaCnuTkFYejzXj4VqArLNuZQYjkJcdfBzi8DupZ \
+                  -p /ip4/185.181.228.123/udp/32229/quic-v1/p2p/12D3KooWCN7LMfjEuEtuaEYzpU9aQz37Cy8FdLz9EPzi5o86JuT6 \
+                  -p /ip4/185.181.228.123/udp/32230/quic-v1/p2p/12D3KooWEFGYzRK6daVdTHq5RMLJ4GSUGkXFU91c6VUWVPtZTxg4 \
+                  -p /ip4/185.181.228.123/udp/32231/quic-v1/p2p/12D3KooWDCVNwUg8EvGPFpN7r1wvSnJv2Lvt92cm5B7DiG7UKNpA
+
+                if [ ! -f "${GENERATED_CONFIG}" ]; then
+                  echo "Could not find generated config at ${GENERATED_CONFIG}"
+                  exit 1
+                fi
+
+                awk '
+                  skip {
+                    if (match($0, /^[[:space:]]*/) && RLENGTH > 4) next
+                    skip = 0
+                  }
+                  /^    file:$/ {
+                    print "    file: null"
+                    skip = 1
+                    next
+                  }
+                  /^  metrics: None$/ {
+                    print "  metrics: !Otlp"
+                    print "    endpoint: \"http://otlp.lab.vac.dev:31317/\""
+                    print "    protocol: \"Grpc\""
+                    print "    service_name: \"" ENVIRON["HOSTNAME"] "\""
+                    print "    authorization_header: \"Bearer " ENVIRON["OTEL_CLIENT_TOKEN"] "\""
+                    next
+                  }
+                  /^  tracing: None$/ {
+                    print "  tracing: !Otlp"
+                    print "    endpoint: \"http://otlp.lab.vac.dev:31317/\""
+                    print "    protocol: \"Grpc\""
+                    print "    service_name: \"" ENVIRON["HOSTNAME"] "\""
+                    print "    authorization_header: \"Bearer " ENVIRON["OTEL_CLIENT_TOKEN"] "\""
+                    print "    sample_ratio: 1.0"
+                    next
+                  }
+                  { print }
+                ' "${GENERATED_CONFIG}" > "${GENERATED_CONFIG}.tmp" && mv "${GENERATED_CONFIG}.tmp" "${GENERATED_CONFIG}"
+
+                mv "${GENERATED_CONFIG}" /state/user_config.yaml
+                if [ -f "${GENERATED_KEYSTORE}" ]; then
+                  mv "${GENERATED_KEYSTORE}" /state/keystore.yaml
+                fi
+              else
+                echo "Using existing /state/user_config.yaml"
+              fi
+
+              exec logos-blockchain-node /state/user_config.yaml
+  volumeClaimTemplates:
+    - metadata:
+        name: nomos-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: longhorn-nomos
+        resources:
+          requests:
+            storage: 20Gi

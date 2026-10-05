@@ -1,0 +1,526 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dst-node
+  namespace: nomos-testnet
+spec:
+  replicas: 1
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app: nomos
+  template:
+    metadata:
+      labels:
+        app: nomos
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: nomos
+      containers:
+        - name: nomos
+          image: soutullostatus/logos-core-blockchain:v0.2.1
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: "1024Mi"
+              cpu: "2000m"
+            limits:
+              memory: "4096Mi"
+              cpu: "4000m"
+          env:
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          volumeMounts:
+            - name: nomos-data
+              mountPath: /state
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  logoscore call blockchain_module get_cryptarchia_info \
+                    | jq -r '.result.value' \
+                    | jq -e '
+                        .cryptarchia_info.state == "Online"
+                        or .mode == "Online"
+                        or .mode.Started == "Online"
+                      '
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          command: ["/bin/sh", "-c"]
+          workingDir: /
+          args:
+            - |
+              set -eu
+              ORD="${HOSTNAME##*-}"
+              BASE=31000
+              SWARM=$((BASE + 2*ORD))
+              BLEND=$((SWARM + 1))
+              LOGOS_MODULES_DIR="${LOGOS_MODULES_DIR:-/opt/logos/modules}"
+
+              logoscore -m "${LOGOS_MODULES_DIR}" -D &
+              LOGOSCORE_PID="$!"
+
+              cleanup() {
+                kill "${LOGOSCORE_PID}" 2>/dev/null || true
+                wait "${LOGOSCORE_PID}" 2>/dev/null || true
+              }
+              trap cleanup TERM INT
+
+              until [ -f /root/.logoscore/client/config.json ]; do
+                echo "Waiting for logoscore daemon client config"
+                sleep 1
+              done
+
+              until logoscore load-module blockchain_module; do
+                echo "Waiting for logoscore daemon to load blockchain_module"
+                logoscore list-modules || true
+                logoscore status || true
+                sleep 2
+              done
+
+              if [ ! -f /state/user_config.yaml ]; then
+                echo "user_config.yaml not found, initializing node"
+                GENERATED_CONFIG=/user_config.yaml
+                GENERATED_KEYSTORE=/keystore.yaml
+
+                logoscore call blockchain_module generate_user_config \
+                  '{
+                    "initial_peers": [
+                      "/ip4/65.109.51.37/udp/3000/quic-v1/p2p/12D3KooWFrouXfmrR4nsLMtE7wu15DoMJ6VtoUtHinREZCvbWHar",
+                      "/ip4/65.109.51.37/udp/3001/quic-v1/p2p/12D3KooWJRGau8M1rjT7R5e4YYsgdFhsMX35nRDtMwCDjxQkXAHz",
+                      "/ip4/65.109.51.37/udp/3002/quic-v1/p2p/12D3KooWQXJavMDTRscjauFSgVAB1VLB6Rzpy2uY5SU9Tk7927tb",
+                      "/ip4/65.109.51.37/udp/50001/quic-v1/p2p/12D3KooWSQc7CcGtvWDPF1yCbBthFnQjprfCVHmfmNDUrSmqQsU1"
+                    ]
+                  }' \
+                  --external-address "/ip4/${HOST_IP}/udp/${SWARM}/quic-v1"
+
+                if [ ! -f "${GENERATED_CONFIG}" ]; then
+                  echo "Could not find generated config at ${GENERATED_CONFIG}"
+                  exit 1
+                fi
+
+                awk '
+                  /^  metrics: None$/ {
+                    print "  metrics: !Otlp"
+                    print "    endpoint: \"http://otlp.lab.vac.dev:31317/\""
+                    print "    protocol: \"Grpc\""
+                    print "    service_name: \"" ENVIRON["HOSTNAME"] "\""
+                    print "    authorization_header: \"Bearer " ENVIRON["OTEL_CLIENT_TOKEN"] "\""
+                    next
+                  }
+                  { print }
+                ' "${GENERATED_CONFIG}" > "${GENERATED_CONFIG}.tmp" && mv "${GENERATED_CONFIG}.tmp" "${GENERATED_CONFIG}"
+
+                awk -v swarm="${SWARM}" -v blend="${BLEND}" '
+                  /^[[:space:]]*net_port:[[:space:]]*/ {
+                    indent = substr($0, 1, match($0, /[^[:space:]]/) - 1)
+                    print indent "net_port: " swarm
+                    next
+                  }
+                  /^[[:space:]]*blend_addr:[[:space:]]*/ {
+                    indent = substr($0, 1, match($0, /[^[:space:]]/) - 1)
+                    print indent "blend_addr: \"/ip4/0.0.0.0/udp/" blend "/quic-v1\""
+                    next
+                  }
+                  { print }
+                ' "${GENERATED_CONFIG}" > "${GENERATED_CONFIG}.tmp" && mv "${GENERATED_CONFIG}.tmp" "${GENERATED_CONFIG}"
+
+                sed -i '/^[[:space:]]*file:[[:space:]]*$/{
+                N
+                N
+                N
+                s|^[[:space:]]*file:[[:space:]]*$\n[[:space:]]*directory: .*$\n[[:space:]]*prefix: .*$\n[[:space:]]*appender_type: .*$|    file: null|
+                }' "${GENERATED_CONFIG}"
+
+                mv "${GENERATED_CONFIG}" /state/user_config.yaml
+                if [ -f "${GENERATED_KEYSTORE}" ]; then
+                  mv "${GENERATED_KEYSTORE}" /state/keystore.yaml
+                fi
+              else
+                echo "Using existing /state/user_config.yaml"
+              fi
+
+              logoscore call blockchain_module start /state/user_config.yaml ""
+              wait "${LOGOSCORE_PID}"
+        - name: blend-declaration
+          image: docker.io/library/alpine:3.20
+          imagePullPolicy: Always
+          env:
+            - name: OTEL_CLIENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: otel-client-token
+                  key: token
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          volumeMounts:
+            - name: nomos-data
+              mountPath: /state
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+          
+              apk add --no-cache curl jq yq
+          
+              ORD="${HOSTNAME##*-}"
+              BASE=31000
+              SWARM=$((BASE + 2 * ORD))
+              BLEND=$((SWARM + 1))
+          
+              USER_CONFIG=/state/user_config.yaml
+              MARKER=/state/.blend-declaration-done
+          
+              if [ -f "$MARKER" ]; then
+                echo "Blend declaration already done, skipping"
+                exec tail -f /dev/null
+              fi
+          
+              post_and_check() {
+                LABEL="$1"
+                URL="$2"
+                DATA="${3-}"
+          
+                RESPONSE_FILE="/tmp/${LABEL}.response"
+                ERROR_FILE="/tmp/${LABEL}.error"
+                STATUS_FILE="/tmp/${LABEL}.status"
+          
+                if [ "$#" -ge 3 ]; then
+                  curl -sS \
+                    -X POST \
+                    -o "$RESPONSE_FILE" \
+                    -w '%{http_code}' \
+                    -H "Content-Type: application/json" \
+                    --data "$DATA" \
+                    "$URL" \
+                    >"$STATUS_FILE" \
+                    2>"$ERROR_FILE" || true
+                else
+                  curl -sS \
+                    -X POST \
+                    -o "$RESPONSE_FILE" \
+                    -w '%{http_code}' \
+                    "$URL" \
+                    >"$STATUS_FILE" \
+                    2>"$ERROR_FILE" || true
+                fi
+          
+                HTTP_CODE="$(cat "$STATUS_FILE")"
+                RESPONSE="$(awk '{ printf "%s", $0 }' "$RESPONSE_FILE")"
+          
+                case "$HTTP_CODE" in
+                  2??)
+                    echo "${LABEL} request succeeded with HTTP ${HTTP_CODE}"
+                    [ -n "$RESPONSE" ] && echo "Response: $RESPONSE"
+                    ;;
+          
+                  429)
+                    case "$LABEL" in
+                      faucet-*)
+                        RETRY_AFTER="$(
+                          echo "$RESPONSE" | jq -r '.retry_after_secs // 0'
+                        )"
+                        echo "${LABEL} is on cooldown for ${RETRY_AFTER}s"
+                        echo "Continuing because a previous faucet request was accepted"
+                        return 0
+                        ;;
+                    esac
+          
+                    echo "${LABEL} request failed with HTTP ${HTTP_CODE}"
+                    echo "Response: $RESPONSE"
+                    exit 1
+                    ;;
+          
+                  *)
+                    echo "${LABEL} request failed with HTTP ${HTTP_CODE}"
+                    [ -n "$RESPONSE" ] && echo "Response: $RESPONSE"
+                    [ -s "$ERROR_FILE" ] &&
+                      echo "curl error: $(cat "$ERROR_FILE")"
+                    exit 1
+                    ;;
+                esac
+              }
+              wait_for_wallet_note() {
+                LABEL="$1"
+                PUBLIC_KEY="$2"
+  
+                BALANCE_FILE="/tmp/${LABEL}-balance.response"
+                ERROR_FILE="/tmp/${LABEL}-balance.error"
+                STATUS_FILE="/tmp/${LABEL}-balance.status"
+  
+                BALANCE_RESPONSE=""
+                NOTE_ID=""
+  
+                for attempt in $(seq 1 120); do
+                  curl -sS \
+                    -o "$BALANCE_FILE" \
+                    -w '%{http_code}' \
+                    "http://localhost:8080/wallet/${PUBLIC_KEY}/balance" \
+                    >"$STATUS_FILE" \
+                    2>"$ERROR_FILE" || true
+  
+                  HTTP_CODE="$(cat "$STATUS_FILE")"
+                  BALANCE_RESPONSE="$(awk '{ printf "%s", $0 }' "$BALANCE_FILE")"
+  
+                  if [ "$HTTP_CODE" = "200" ]; then
+                    NOTE_ID="$(
+                      echo "$BALANCE_RESPONSE" |
+                        jq -r '.notes | keys[0] // empty'
+                    )"
+  
+                    if [ -n "$NOTE_ID" ]; then
+                      case "$NOTE_ID" in
+                        *[!0-9a-fA-F]*)
+                          echo "Invalid ${LABEL} note ID: ${NOTE_ID}" >&2
+                          return 1
+                          ;;
+                      esac
+  
+                      echo "${LABEL} wallet is ready" >&2
+                      echo "${LABEL} note: ${NOTE_ID}" >&2
+  
+                      # stdout must contain only the note ID because the caller
+                      # captures this function with $(...)
+                      printf '%s\n' "$NOTE_ID"
+                      return 0
+                    fi
+  
+                    echo "${LABEL} wallet returned no notes yet" >&2
+                  else
+                    echo "${LABEL} wallet returned HTTP ${HTTP_CODE}" >&2
+  
+                    [ -n "$BALANCE_RESPONSE" ] &&
+                      echo "Response: $BALANCE_RESPONSE" >&2
+  
+                    [ -s "$ERROR_FILE" ] &&
+                      echo "curl error: $(cat "$ERROR_FILE")" >&2
+                  fi
+  
+                  echo "${LABEL} wallet not available yet (${attempt}/120)" >&2
+                  sleep 5
+                done
+  
+                echo "Could not find a note for ${LABEL} public key" >&2
+                echo "Last ${LABEL} balance response: ${BALANCE_RESPONSE:-empty}" >&2
+                return 1
+              }
+          
+              echo "Waiting for cryptarchia API to report Online"
+          
+              while true; do
+                CRYPTARCHIA_INFO="$(
+                  curl -sS \
+                    "http://localhost:8080/cryptarchia/info" \
+                    2>/dev/null || true
+                )"
+          
+                if [ -n "$CRYPTARCHIA_INFO" ] &&
+                  echo "$CRYPTARCHIA_INFO" | jq -e '
+                    .cryptarchia_info.state == "Online"
+                    or .mode == "Online"
+                    or .mode.Started == "Online"
+                  ' >/dev/null 2>&1
+                then
+                  echo "Cryptarchia API is Online"
+                  break
+                fi
+          
+                CURRENT_STATE="$(
+                  echo "$CRYPTARCHIA_INFO" | jq -r '
+                    .cryptarchia_info.state
+                    // .mode.Started
+                    // .mode
+                    // .phase
+                    // "unavailable"
+                  ' 2>/dev/null || echo "unavailable"
+                )"
+          
+                echo "Current state: ${CURRENT_STATE}"
+                sleep 5
+              done
+          
+              KMS_ID="$(
+                yq -r '.blend.core.zk.secret_key_kms_id // ""' "$USER_CONFIG"
+              )"
+          
+              if [ -z "$KMS_ID" ]; then
+                echo "Could not find blend.core.zk.secret_key_kms_id"
+                exit 1
+              fi
+          
+              BLEND_PK="$(
+                KMS_ID="$KMS_ID" yq -r \
+                  '.wallet.known_keys[strenv(KMS_ID)] // ""' \
+                  "$USER_CONFIG"
+              )"
+          
+              if [ -z "$BLEND_PK" ]; then
+                echo "Could not resolve public key for KMS ID: $KMS_ID"
+                exit 1
+              fi
+          
+              FUNDING_PK="$(
+                yq -r '.sdp.wallet.funding_pk // ""' "$USER_CONFIG"
+              )"
+          
+              if [ -z "$FUNDING_PK" ]; then
+                echo "Could not find sdp.wallet.funding_pk"
+                exit 1
+              fi
+          
+              echo "Using KMS ID: $KMS_ID"
+              echo "Using blend public key: $BLEND_PK"
+              echo "Using funding public key: $FUNDING_PK"
+          
+              post_and_check \
+                faucet-blend \
+                "https://testnet.blockchain.logos.co/web/faucet-backend/${KMS_ID}"
+          
+              post_and_check \
+                faucet-funding \
+                "https://testnet.blockchain.logos.co/web/faucet-backend/${FUNDING_PK}"
+          
+              echo "Faucet requests completed"
+          
+              echo "Waiting for blend wallet balance"
+              NOTE_ID_HEX="$(
+                wait_for_wallet_note blend "$BLEND_PK"
+              )"
+          
+              echo "Using NOTE_ID_HEX: $NOTE_ID_HEX"
+          
+              echo "Waiting for funding wallet balance"
+              FUNDING_NOTE_ID_HEX="$(
+                wait_for_wallet_note funding "$FUNDING_PK"
+              )"
+          
+              echo "Using FUNDING_NOTE_ID_HEX: $FUNDING_NOTE_ID_HEX"
+          
+              LOCATOR="/ip4/${HOST_IP}/udp/${BLEND}/quic-v1"
+          
+              JOIN_PAYLOAD="$(
+                jq -nc \
+                  --arg locator "$LOCATOR" \
+                  --arg locked_note_id "$NOTE_ID_HEX" \
+                  '{
+                    locator: $locator,
+                    locked_note_id: $locked_note_id
+                  }'
+              )"
+          
+              JOIN_CONFIRMED=false
+          
+              for attempt in $(seq 1 12); do
+                JOIN_RESPONSE_FILE=/tmp/blend-join.response
+                JOIN_ERROR_FILE=/tmp/blend-join.error
+                JOIN_STATUS_FILE=/tmp/blend-join.status
+          
+                curl -sS \
+                  -X POST \
+                  -o "$JOIN_RESPONSE_FILE" \
+                  -w '%{http_code}' \
+                  -H "Content-Type: application/json" \
+                  --data "$JOIN_PAYLOAD" \
+                  "http://localhost:8080/blend/join" \
+                  >"$JOIN_STATUS_FILE" \
+                  2>"$JOIN_ERROR_FILE" || true
+          
+                HTTP_CODE="$(cat "$JOIN_STATUS_FILE")"
+                JOIN_RESPONSE="$(awk '{ printf "%s", $0 }' "$JOIN_RESPONSE_FILE")"
+          
+                case "$HTTP_CODE" in
+                  2??)
+                    echo "blend-join request succeeded with HTTP ${HTTP_CODE}"
+                    [ -n "$JOIN_RESPONSE" ] &&
+                      echo "Response: $JOIN_RESPONSE"
+                    JOIN_CONFIRMED=true
+                    break
+                    ;;
+                  *)
+                    echo "blend-join request returned HTTP ${HTTP_CODE}"
+                    [ -n "$JOIN_RESPONSE" ] &&
+                      echo "Response: $JOIN_RESPONSE"
+                    [ -s "$JOIN_ERROR_FILE" ] &&
+                      echo "curl error: $(cat "$JOIN_ERROR_FILE")"
+                    echo "Retrying blend join (${attempt}/12)"
+                    sleep 10
+                    ;;
+                esac
+              done
+          
+              if [ "$JOIN_CONFIRMED" != "true" ]; then
+                echo "Blend join failed after all retries"
+                exit 1
+              fi
+          
+              echo "Blend join request accepted"
+          
+              MAX_DECLARATION_RETRIES=60
+              DECLARATION_RETRY_SECONDS=5
+              DECLARATION_CONFIRMED=false
+          
+              DECLARATIONS_FILE=/tmp/declarations.response
+              DECLARATIONS_ERROR_FILE=/tmp/declarations.error
+              DECLARATIONS_STATUS_FILE=/tmp/declarations.status
+          
+              for attempt in $(seq 1 "$MAX_DECLARATION_RETRIES"); do
+                curl -sS \
+                  -o "$DECLARATIONS_FILE" \
+                  -w '%{http_code}' \
+                  "http://localhost:8080/mantle/sdp/declarations" \
+                  >"$DECLARATIONS_STATUS_FILE" \
+                  2>"$DECLARATIONS_ERROR_FILE" || true
+          
+                HTTP_CODE="$(cat "$DECLARATIONS_STATUS_FILE")"
+                DECLARATIONS_RESPONSE="$(
+                  awk '{ printf "%s", $0 }' "$DECLARATIONS_FILE"
+                )"
+          
+                if [ "$HTTP_CODE" = "200" ] &&
+                  echo "$DECLARATIONS_RESPONSE" |
+                    jq -e --arg blend_pk "$BLEND_PK" '
+                      type == "object"
+                      and any(.[]; .zk_id == $blend_pk)
+                    ' >/dev/null 2>&1
+                then
+                  echo "Declaration found for public key: $BLEND_PK"
+                  DECLARATION_CONFIRMED=true
+                  break
+                fi
+          
+                echo "Declaration not found yet (${attempt}/${MAX_DECLARATION_RETRIES})"
+                sleep "$DECLARATION_RETRY_SECONDS"
+              done
+          
+              if [ "$DECLARATION_CONFIRMED" != "true" ]; then
+                echo "Timed out waiting for declaration"
+                exit 1
+              fi
+          
+              touch "$MARKER"
+              exec tail -f /dev/null
+  volumeClaimTemplates:
+    - metadata:
+        name: nomos-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: longhorn-nomos
+        resources:
+          requests:
+            storage: 20Gi

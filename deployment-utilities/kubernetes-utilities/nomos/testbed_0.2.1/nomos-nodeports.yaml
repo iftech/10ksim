@@ -1,0 +1,209 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-initial-0-nodeport
+  namespace: nomos-testbed
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-initial-0
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 3001
+      targetPort: 3001
+      nodePort: 32222
+    - name: blend
+      protocol: UDP
+      port: 3400
+      targetPort: 3400
+      nodePort: 32240
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-initial-1-nodeport
+  namespace: nomos-testbed
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-initial-1
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 3002
+      targetPort: 3002
+      nodePort: 32223
+    - name: blend
+      protocol: UDP
+      port: 3400
+      targetPort: 3400
+      nodePort: 32241
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-initial-2-nodeport
+  namespace: nomos-testbed
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-initial-2
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 3003
+      targetPort: 3003
+      nodePort: 32224
+    - name: blend
+      protocol: UDP
+      port: 3400
+      targetPort: 3400
+      nodePort: 32242
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-initial-3-nodeport
+  namespace: nomos-testbed
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-initial-3
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 3004
+      targetPort: 3004
+      nodePort: 32225
+    - name: blend
+      protocol: UDP
+      port: 3400
+      targetPort: 3400
+      nodePort: 32243
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-initial-4-nodeport
+  namespace: nomos-testbed
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-initial-4
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 3005
+      targetPort: 3005
+      nodePort: 32226
+    - name: blend
+      protocol: UDP
+      port: 3400
+      targetPort: 3400
+      nodePort: 32244
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-initial-5-nodeport
+  namespace: nomos-testbed
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-initial-5
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 3006
+      targetPort: 3006
+      nodePort: 32227
+    - name: blend
+      protocol: UDP
+      port: 3400
+      targetPort: 3400
+      nodePort: 32245
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-initial-6-nodeport
+  namespace: nomos-testbed
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-initial-6
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 3007
+      targetPort: 3007
+      nodePort: 32228
+    - name: blend
+      protocol: UDP
+      port: 3400
+      targetPort: 3400
+      nodePort: 32246
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-initial-7-nodeport
+  namespace: nomos-testbed
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-initial-7
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 3008
+      targetPort: 3008
+      nodePort: 32229
+    - name: blend
+      protocol: UDP
+      port: 3400
+      targetPort: 3400
+      nodePort: 32247
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-initial-8-nodeport
+  namespace: nomos-testbed
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-initial-8
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 3009
+      targetPort: 3009
+      nodePort: 32230
+    - name: blend
+      protocol: UDP
+      port: 3400
+      targetPort: 3400
+      nodePort: 32248
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomos-initial-9-nodeport
+  namespace: nomos-testbed
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: nomos-initial-9
+  ports:
+    - name: swarm
+      protocol: UDP
+      port: 3010
+      targetPort: 3010
+      nodePort: 32231
+    - name: blend
+      protocol: UDP
+      port: 3400
+      targetPort: 3400
+      nodePort: 32249

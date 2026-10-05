@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nomos-initial
+  namespace: nomos-testbed
+spec:
+  serviceName: nomos-initial
+  replicas: 10
+  podManagementPolicy: Parallel
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app: nomos
+      pool: initial
+  template:
+    metadata:
+      labels:
+        app: nomos
+        pool: initial
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: node-02.ih-eu-mda1.misc.vaclab
+      volumes:
+        - name: user-configs
+          configMap:
+            name: nomos-initial-user-configs
+        - name: keystores
+          configMap:
+            name: nomos-initial-keystores
+      containers:
+        - name: nomos
+          image: ghcr.io/logos-blockchain/logos-blockchain:0.2.4-dst
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: "1024Mi"
+              cpu: "1000m"
+            limits:
+              memory: "4096Mi"
+              cpu: "2000m"
+          env:
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_CLIENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: otel-client-token
+                  key: token
+          ports:
+            - name: blend
+              protocol: UDP
+              containerPort: 3400
+          volumeMounts:
+            - name: nomos-data
+              mountPath: /state
+            - name: user-configs
+              mountPath: /configs/user-configs
+              readOnly: true
+            - name: keystores
+              mountPath: /configs/keystores
+              readOnly: true
+          readinessProbe:
+            # Must not require cryptarchia state to be "Online": the NodePort
+            # Services only route to Ready pods, and these 10 nodes can only
+            # reach Online by peering with each other over that same traffic.
+            # Requiring Online here would deadlock the whole bootstrap.
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  curl -fsS -o /dev/null http://localhost:8080/cryptarchia/info
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              ORD="${HOSTNAME##*-}"
+
+              if [ ! -f /state/user_config.yaml ]; then
+                echo "Seeding /state from pre-baked config for ordinal ${ORD}"
+                cp "/configs/user-configs/user_config_${ORD}.yaml" /state/user_config.yaml
+                cp "/configs/keystores/keystore_${ORD}.yaml" /state/keystore.yaml
+
+                awk '
+                  skip {
+                    if (match($0, /^[[:space:]]*/) && RLENGTH > 4) next
+                    skip = 0
+                  }
+                  /^    file:$/ {
+                    print "    file: null"
+                    skip = 1
+                    next
+                  }
+                  /^  metrics: None$/ {
+                    print "  metrics: !Otlp"
+                    print "    endpoint: \"http://otlp.lab.vac.dev:31317/\""
+                    print "    protocol: \"Grpc\""
+                    print "    service_name: \"" ENVIRON["HOSTNAME"] "\""
+                    print "    authorization_header: \"Bearer " ENVIRON["OTEL_CLIENT_TOKEN"] "\""
+                    next
+                  }
+                  /^  tracing: None$/ {
+                    print "  tracing: !Otlp"
+                    print "    endpoint: \"http://otlp.lab.vac.dev:31317/\""
+                    print "    protocol: \"Grpc\""
+                    print "    service_name: \"" ENVIRON["HOSTNAME"] "\""
+                    print "    authorization_header: \"Bearer " ENVIRON["OTEL_CLIENT_TOKEN"] "\""
+                    print "    sample_ratio: 1.0"
+                    next
+                  }
+                  { print }
+                ' /state/user_config.yaml > /state/user_config.yaml.tmp && mv /state/user_config.yaml.tmp /state/user_config.yaml
+              else
+                echo "Using existing /state/user_config.yaml"
+              fi
+
+              exec logos-blockchain-node /state/user_config.yaml
+  volumeClaimTemplates:
+    - metadata:
+        name: nomos-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: longhorn-nomos
+        resources:
+          requests:
+            storage: 30Gi
