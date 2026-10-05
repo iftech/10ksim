@@ -8,8 +8,9 @@ import seaborn as sns
 from pydantic import NonNegativeInt
 
 # Project Imports
+from src.analysis.mesh_analysis.analyzers.adaptor import AnalysisAdaptor
 from src.analysis.mesh_analysis.analyzers.analyzer import OnFail
-from src.analysis.mesh_analysis.analyzers.nimlibp2p_analyzer import Nimlibp2pAnalyzer
+from src.analysis.mesh_analysis.analyzers.libp2p.analyzer import Nimlibp2pAnalyzer
 from src.analysis.mesh_analysis.readers.tracers.message_tracer import MessageTracer
 from src.analysis.mesh_analysis.readers.tracers.waku_tracer import WakuTracer
 from src.analysis.utils import list_utils
@@ -18,8 +19,17 @@ logger = logging.getLogger(__name__)
 sns.set_theme()
 
 
-class WakuAnalyzer(Nimlibp2pAnalyzer):
+class WakuAnalyzer(Nimlibp2pAnalyzer, AnalysisAdaptor):
+
     msg_hash_key: str = "msg_hash"
+
+    def supports(self, exp_name: str) -> Self:
+        if exp_name != "waku":
+            raise ValueError(
+                f"Experiment type not supported by this analyzer. "
+                f"Experiment: `{exp_name}` Analyzer: `{self.__class__}`"
+            )
+        return self
 
     def with_filter_check(self, *, on_fail: OnFail = "continue") -> Self:
         return self._with_parameterized_check(
