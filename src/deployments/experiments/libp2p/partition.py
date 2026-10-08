@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from typing import ClassVar, List
+from typing import ClassVar, List, Literal
 
 from kubernetes.client import (
     V1LabelSelector,
@@ -206,7 +206,7 @@ class PartitionCutConfig(PartitionConfig):
     """Ready means already meshed, which the cut has to follow."""
     delay_cold_start: NonNegativeFloat = 60
     """One network forming, so no allowance for a half meshing behind a split."""
-    anchor_side: str = "a"
+    anchor_side: Literal["a", "b", ""] = "a"
     """Side the anchor is on during the cut; empty leaves it reachable from both."""
 
 

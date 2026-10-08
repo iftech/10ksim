@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 from kubernetes.client import ApiClient
+from pydantic import ValidationError
 
 from src.deployments.experiments.libp2p import partition
 from src.deployments.experiments.libp2p.partition import (
@@ -71,3 +72,14 @@ async def test_cut_without_an_anchor_labels_only_the_nodes(tmp_path, steps):
     exp = _experiment(NetworkPartitionCut, config, tmp_path)
     await exp._after_nodes(NODES)
     assert steps == [("label", "a"), ("label", "b")]
+
+
+@pytest.mark.parametrize("side", ["a", "b", ""])
+def test_anchor_side_accepts_a_side_or_none(side):
+    assert PartitionCutConfig(num_relay_nodes=4, anchor_side=side).anchor_side == side
+
+
+@pytest.mark.parametrize("side", ["c", "A", "both"])
+def test_anchor_side_rejects_anything_else(side):
+    with pytest.raises(ValidationError):
+        PartitionCutConfig(num_relay_nodes=4, anchor_side=side)
