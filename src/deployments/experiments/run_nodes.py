@@ -3,6 +3,9 @@
 A node signals a failed check by exiting non-zero, so the run needs no knowledge of what
 the node does. Nodes run as an Indexed Job: a StatefulSet would restart a node that
 exits and lose its exit code.
+
+Node i is reachable as `node-<i>.nodes` and gets NODE_INDEX, NUM_NODES and SERVICE in
+its environment, so nodes can find their peers.
 """
 
 import asyncio
@@ -17,15 +20,20 @@ from kubernetes import client
 from kubernetes.client import (
     ApiException,
     V1Container,
+    V1EnvVar,
+    V1EnvVarSource,
     V1Job,
     V1JobSpec,
+    V1ObjectFieldSelector,
     V1ObjectMeta,
     V1Pod,
     V1PodSpec,
     V1PodTemplateSpec,
+    V1Service,
 )
 from pydantic import BaseModel, ConfigDict, NonNegativeInt, PositiveInt, PrivateAttr
 
+from src.deployments.core.builders import ServiceBuilder
 from src.deployments.core.configs.container import Image
 from src.deployments.core.pod_logs import capture_pod_logs
 from src.deployments.experiments.base_experiment import BaseExperiment
@@ -34,6 +42,7 @@ from src.deployments.registry import experiment
 logger = logging.getLogger(__name__)
 
 NAME = "node"
+SERVICE = "nodes"
 INDEX_LABEL = "batch.kubernetes.io/job-completion-index"
 
 NodeState = Literal["pending", "running", "exited", "failed"]
@@ -60,13 +69,34 @@ class NodeStatus:
     image_id: Optional[str] = None
 
 
+def build_service(namespace: str) -> V1Service:
+    # Headless, no ports: only gives each node a DNS name.
+    return (
+        ServiceBuilder()
+        .with_name(SERVICE)
+        .with_namespace(namespace)
+        .with_cluster_ip("None")
+        .with_publish_not_ready_addresses(True)
+        .with_selector("app", NAME)
+        .build()
+    )
+
+
 def build_job(namespace: str, config: ExpConfig) -> V1Job:
     labels = {"app": NAME}
+    index = V1EnvVarSource(
+        field_ref=V1ObjectFieldSelector(field_path=f"metadata.labels['{INDEX_LABEL}']")
+    )
     container = V1Container(
         name=NAME,
         image=str(config.image),
         # Tags get re-pushed between runs.
         image_pull_policy="Always",
+        env=[
+            V1EnvVar(name="NODE_INDEX", value_from=index),
+            V1EnvVar(name="NUM_NODES", value=str(config.num_nodes)),
+            V1EnvVar(name="SERVICE", value=SERVICE),
+        ],
     )
     return V1Job(
         api_version="batch/v1",
@@ -80,7 +110,8 @@ def build_job(namespace: str, config: ExpConfig) -> V1Job:
             backoff_limit_per_index=0,
             template=V1PodTemplateSpec(
                 metadata=V1ObjectMeta(labels=labels),
-                spec=V1PodSpec(restart_policy="Never", containers=[container]),
+                # With the Job's `node-<i>` hostnames, makes `node-<i>.nodes` resolve.
+                spec=V1PodSpec(restart_policy="Never", subdomain=SERVICE, containers=[container]),
             ),
         ),
     )
@@ -162,7 +193,10 @@ class RunNodesExperiment(BaseExperiment[ExpConfig]):
     async def _run(self):
         self.log_event("run_start")
         cfg = self.config
-        await self.deploy(deployment=build_job(self.namespace, cfg), wait_for_ready=False)
+        await self.deploy(
+            deployment=[build_service(self.namespace), build_job(self.namespace, cfg)],
+            wait_for_ready=False,
+        )
         if self.dry_run:
             return
 
