@@ -2,6 +2,7 @@
 import argparse
 import asyncio
 import logging
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -13,7 +14,7 @@ from ruamel import yaml
 from src.analysis.utils.log_utils import init_logger
 from src.deployments.core.k8s_kubeconfig import set_config_file
 from src.deployments.registry import registry as experiment_registry
-from src.deployments.utils.parser import ARG_NOT_SET
+from src.deployments.utils.parser import ARG_NOT_SET, with_experiment_from_values
 
 logger = logging.getLogger(__name__)
 
@@ -52,14 +53,13 @@ async def run_experiment(
     await experiment.run()
 
 
-async def main():
-    parser = argparse.ArgumentParser(
-        description="A tool to run experiments. Generates deployment yaml with helm and deploys using the given kubeconfig. Dependencies: helm must be installed and in $PATH."
+def add_top_level_args(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        "--values",
+        default=None,
+        help="Path to values.yaml. Its `experiment` key picks the experiment when none is given.",
+        dest="values_path",
     )
-
-    subparsers = parser.add_subparsers(dest="experiment", required=True)
-
-    parser.add_argument("--values", default=None, help="Path to values.yaml", dest="values_path")
     parser.add_argument(
         "--config",
         required=False,
@@ -87,6 +87,15 @@ async def main():
         "Default path uses `__file__/out/{{datetime}}`.",
     )
 
+
+async def main():
+    parser = argparse.ArgumentParser(
+        description="A tool to run experiments. Generates deployment yaml with helm and deploys using the given kubeconfig. Dependencies: helm must be installed and in $PATH."
+    )
+
+    subparsers = parser.add_subparsers(dest="experiment", required=True)
+    add_top_level_args(parser)
+
     # Scan for experiments.
     experiment_registry.scan(Path(__file__) / ".." / "src" / "deployments", mode="skip")
 
@@ -97,7 +106,10 @@ async def main():
         except AttributeError as e:
             raise AttributeError(f"{info}") from e
 
-    args = parser.parse_args()
+    top_level = argparse.ArgumentParser(add_help=False)
+    add_top_level_args(top_level)
+    names = [info.name for info in experiment_registry.items()]
+    args = parser.parse_args(with_experiment_from_values(sys.argv[1:], top_level, names))
     verbosity = args.verbosity or 2
     init_logger(logging.getLogger(), verbosity)
 

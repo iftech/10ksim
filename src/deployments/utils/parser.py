@@ -2,10 +2,12 @@
 import argparse
 import json
 import types
-from typing import Annotated, Any, Literal, Union, get_args, get_origin
+from typing import Annotated, Any, Iterable, List, Literal, Union, get_args, get_origin
 
 from pydantic import BaseModel, ValidationError
 from pydantic.fields import FieldInfo
+
+from src.utils.yaml_utils import get_YAML
 
 ARG_NOT_SET = object()
 
@@ -148,3 +150,25 @@ def _config_model_fields_to_args(config_model: type[BaseModel]) -> list[tuple[st
     for field_name, field in config_model.model_fields.items():
         args.append(_field_to_arg(field_name, field))
     return args
+
+
+def with_experiment_from_values(
+    argv: List[str], top_level: argparse.ArgumentParser, names: Iterable[str]
+) -> List[str]:
+    """Add the values file's `experiment` as the subcommand when the CLI names none."""
+    known, rest = top_level.parse_known_args(argv)
+    if (rest and rest[0] in names) or known.values_path is None:
+        return argv
+    with open(known.values_path) as values:
+        name = (get_YAML().load(values) or {}).get("experiment")
+    if name is None:
+        return argv
+
+    # Top-level options must come before the subcommand, the experiment's own after it.
+    top, matched = [], 0
+    for token in argv:
+        if matched < len(rest) and token == rest[matched]:
+            matched += 1
+        else:
+            top.append(token)
+    return top + [name] + rest
