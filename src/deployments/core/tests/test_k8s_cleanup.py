@@ -123,6 +123,13 @@ class TestPollCleanupStatus:
         assert poll_cleanup_status({"StatefulSet": ["nodes-0"]}, "ns", MagicMock()) is False
         apps.read_namespaced_stateful_set.assert_called_once_with("nodes-0", "ns")
 
+    def test_cronjob_is_read_via_batch_v1(self, mocker):
+        batch = MagicMock()
+        mocker.patch.object(k8s_cleanup.client, "BatchV1Api", return_value=batch)
+
+        assert poll_cleanup_status({"CronJob": ["c0"]}, "ns", MagicMock()) is False
+        batch.read_namespaced_cron_job.assert_called_once_with("c0", "ns")
+
 
 # --------------------------------------------------------------------------- #
 # cleanup_resources  (deletes resources via k8s client)
@@ -146,6 +153,14 @@ class TestCleanupResources:
         cleanup_resources({"Pod": ["p0"]}, "ns", api_client=MagicMock())  # must not raise
 
         core.delete_namespaced_pod.assert_called_once_with("p0", "ns")
+
+    def test_cronjob_is_deleted_via_batch_v1(self, mocker):
+        batch = MagicMock()
+        mocker.patch.object(k8s_cleanup.client, "BatchV1Api", return_value=batch)
+
+        cleanup_resources({"CronJob": ["c0"]}, "ns", api_client=MagicMock())
+
+        batch.delete_namespaced_cron_job.assert_called_once_with("c0", "ns")
 
     def test_controllers_deleted_before_pods(self, mocker):
         manager = MagicMock()

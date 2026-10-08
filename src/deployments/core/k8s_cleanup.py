@@ -131,7 +131,7 @@ def cleanup_resources(
             namespace,
             body=client.V1DeleteOptions(propagation_policy="Foreground"),
         ),
-        "CronJob": lambda name: client.BatchV1beta1Api(api_client).delete_namespaced_cron_job(
+        "CronJob": lambda name: client.BatchV1Api(api_client).delete_namespaced_cron_job(
             name, namespace
         ),
         "Pod": lambda name: client.CoreV1Api(api_client).delete_namespaced_pod(name, namespace),
@@ -203,7 +203,7 @@ def poll_cleanup_status(
             api_client
         ).read_namespaced_replication_controller(name, namespace),
         "Job": lambda name: client.BatchV1Api(api_client).read_namespaced_job(name, namespace),
-        "CronJob": lambda name: client.BatchV1beta1Api(api_client).read_namespaced_cron_job(
+        "CronJob": lambda name: client.BatchV1Api(api_client).read_namespaced_cron_job(
             name, namespace
         ),
         "Pod": lambda name: client.CoreV1Api(api_client).read_namespaced_pod(name, namespace),
