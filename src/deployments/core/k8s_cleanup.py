@@ -225,7 +225,7 @@ def poll_cleanup_status(
     }
 
     for kind, names in resources.items():
-        reader = map.get(kind.lower())
+        reader = map.get(kind)
         if not reader:
             continue
         for name in names:

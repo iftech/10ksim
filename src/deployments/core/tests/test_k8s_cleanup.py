@@ -6,6 +6,7 @@ from kubernetes.client.rest import ApiException
 from src.deployments.core import k8s_cleanup
 from src.deployments.core.k8s_cleanup import (
     cleanup_resources,
+    poll_cleanup_status,
     poll_namespace_has_objects,
     wait_for_no_objs_in_namespace,
 )
@@ -109,6 +110,18 @@ class TestWaitForNoObjsInNamespace:
 
         with pytest.raises(TimeoutError):
             wait_for_no_objs_in_namespace("ns", timeout=-1, api_client=MagicMock())
+
+
+# --------------------------------------------------------------------------- #
+# poll_cleanup_status  (reads named resources via k8s client)
+# --------------------------------------------------------------------------- #
+class TestPollCleanupStatus:
+    def test_false_while_a_statefulset_still_exists(self, mocker):
+        apps = MagicMock()
+        mocker.patch.object(k8s_cleanup.client, "AppsV1Api", return_value=apps)
+
+        assert poll_cleanup_status({"StatefulSet": ["nodes-0"]}, "ns", MagicMock()) is False
+        apps.read_namespaced_stateful_set.assert_called_once_with("nodes-0", "ns")
 
 
 # --------------------------------------------------------------------------- #
