@@ -16,7 +16,11 @@ from src.deployments.experiments.base_experiment import BaseExperiment, V1Deploy
 from src.deployments.libp2p.builders.nodes import Nodes
 from src.deployments.pod_api_requester.builder import PodApiRequesterBuilder
 from src.deployments.pod_api_requester.configs import Target
-from src.deployments.pod_api_requester.pod_api_requester import PodApiApplicationError, PodApiError
+from src.deployments.pod_api_requester.pod_api_requester import (
+    PodApiApplicationError,
+    PodApiError,
+    requester_address,
+)
 from src.deployments.pod_api_requester.waku import waku_publish
 from src.deployments.registry import experiment
 from src.deployments.waku.bridge import Bridge
@@ -124,7 +128,7 @@ def build_store_nodes(namespace: str) -> dict:
     return api_client.sanitize_for_serialization(deployment)
 
 
-async def publish(namespace, random_name, msg_size_kbytes, cluster_id):
+async def publish(namespace, random_name, msg_size_kbytes, cluster_id, requester):
     try:
         target = Target(
             name="waku-node",
@@ -137,6 +141,7 @@ async def publish(namespace, random_name, msg_size_kbytes, cluster_id):
             target=target,
             msg_size_kbytes=msg_size_kbytes,
             cluster_id=cluster_id,
+            requester=requester,
         )
     except PodApiApplicationError as e:
         logger.error(f"PodApiApplicationError: {e} {traceback.format_exc()}")
@@ -212,6 +217,7 @@ class WakuExperiment(BaseExperiment[ExpConfig]):
         if self.config.grab_metrics:
             await self.dump_metrics(relay_name, 10, "pre_publish")
 
+        address = requester_address(namespace)
         self.log_event("start_messages")
         tasks = []
         for message_index in range(0, self.config.num_messages):
@@ -222,7 +228,9 @@ class WakuExperiment(BaseExperiment[ExpConfig]):
             )
             tasks.append(
                 asyncio.create_task(
-                    publish(namespace, random_name, self.config.msg_size_kbytes, cluster_id)
+                    publish(
+                        namespace, random_name, self.config.msg_size_kbytes, cluster_id, address
+                    )
                 )
             )
             await asyncio.sleep(self.config.delay_after_publish)

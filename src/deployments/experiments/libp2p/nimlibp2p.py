@@ -20,7 +20,11 @@ from src.deployments.libp2p.builders.helpers import readiness_probe_metrics
 from src.deployments.pod_api_requester.builder import PodApiRequesterBuilder
 from src.deployments.pod_api_requester.configs import Target
 from src.deployments.pod_api_requester.nimlibp2p import libp2p_dst_node_publish
-from src.deployments.pod_api_requester.pod_api_requester import PodApiApplicationError, PodApiError
+from src.deployments.pod_api_requester.pod_api_requester import (
+    PodApiApplicationError,
+    PodApiError,
+    requester_address,
+)
 from src.deployments.registry import experiment
 
 logger = logging.getLogger(__name__)
@@ -178,7 +182,7 @@ def build_bootstrap_nodes(namespace: str, params: ExpConfig) -> V1StatefulSet:
     )
 
 
-async def publish(config, namespace, random_name) -> bool:
+async def publish(config, namespace, random_name, requester) -> bool:
     """Publish one message. Returns whether it reached the node."""
     try:
         target = Target(
@@ -188,7 +192,10 @@ async def publish(config, namespace, random_name) -> bool:
             port=8645,
         )
         await libp2p_dst_node_publish(
-            namespace=namespace, target=target, msg_size_bytes=config.message_size_bytes
+            namespace=namespace,
+            target=target,
+            msg_size_bytes=config.message_size_bytes,
+            requester=requester,
         )
         return True
     except PodApiApplicationError as e:
@@ -273,6 +280,7 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
             }
         )
 
+        address = requester_address(namespace)
         logger.info(f"Starting publish loop for nodes in `{name}`")
 
         self.log_event("start_messages")
@@ -284,7 +292,7 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
             index = random.randint(0, self._publishable_nodes() - 1)
             random_name = f"{name}-{index}"
             self.log_event({"event": "publish", "node": random_name, "index": msg_index})
-            tasks.append(asyncio.create_task(publish(self.config, namespace, random_name)))
+            tasks.append(asyncio.create_task(publish(self.config, namespace, random_name, address)))
             await asyncio.sleep(self.config.delay_after_publish)
         published = await asyncio.gather(*tasks)
         failed = published.count(False)

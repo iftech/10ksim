@@ -1,6 +1,6 @@
 # Python Imports
 import logging
-from typing import Union
+from typing import Optional, Tuple, Union
 
 from pydantic import NonNegativeInt
 
@@ -18,6 +18,7 @@ async def waku_publish(
     cluster_id: NonNegativeInt = 2,
     port: NonNegativeInt = 8645,
     msg_size_kbytes: NonNegativeInt = 10,
+    requester: Optional[Tuple[str, int]] = None,
 ) -> dict:
     return await pod_api_request(
         namespace=namespace,
@@ -31,4 +32,5 @@ async def waku_publish(
             "port": port,
             "msg_size_kbytes": msg_size_kbytes,
         },
+        requester=requester,
     )

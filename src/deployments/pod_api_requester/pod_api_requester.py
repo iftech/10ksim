@@ -179,6 +179,13 @@ def _get_api_requester_info(
     return target_ip, node_port
 
 
+def requester_address(namespace: str) -> Tuple[str, int]:
+    """Node IP and NodePort of the default pod-api-requester."""
+    return _get_api_requester_info(
+        namespace=namespace, service_name=_DEFAULTS["service_name"], app=_DEFAULTS["app"]
+    )
+
+
 async def pod_api_request(
     namespace: str,
     service_name: str,
@@ -187,8 +194,10 @@ async def pod_api_request(
     data: dict,
     *,
     publisher_pod: str | NonNegativeInt = 0,
+    requester: Optional[Tuple[str, int]] = None,
 ) -> dict:
-    target_ip, node_port = _get_api_requester_info(
+    target_ip, node_port = requester or await asyncio.to_thread(
+        _get_api_requester_info,
         namespace=namespace,
         service_name=service_name,
         app=app,
