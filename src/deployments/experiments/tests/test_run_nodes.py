@@ -113,6 +113,8 @@ async def test_a_node_that_exits_non_zero_fails_the_run(tmp_path, mocker):
 
     result = json.loads((exp.output_folder / "node_results.json").read_text())
     assert (result["running"], result["failed"]) == (1, 1)
+    summary = (exp.output_folder / "summary.md").read_text()
+    assert "## run-nodes: failed" in summary and "| node-1 | failed | 3 | Error |" in summary
 
 
 @pytest.mark.asyncio

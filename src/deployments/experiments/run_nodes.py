@@ -205,6 +205,30 @@ def summarize(nodes: List[NodeStatus], num_nodes: int) -> dict:
     }
 
 
+def render_summary(summary: dict, nodes: List[NodeStatus], failures: List[str]) -> str:
+    """Markdown report of a run, for the GitHub run page."""
+    lines = [f"## run-nodes: {'failed' if failures else 'passed'}", ""]
+    lines += [f"- {reason}" for reason in failures] + ([""] if failures else [])
+    lines += [
+        f"- Ended: {summary['ended']} after {summary['run_seconds']}s",
+        f"- Nodes: {summary['num_nodes']} ({summary['running']} running, {summary['exited']} "
+        f"exited 0, {summary['failed']} failed, {summary['not_started']} never started)",
+    ]
+    if "published" in summary:
+        lines.append(f"- Published: {summary['published']} ({summary['publish_failed']} failed)")
+    lines += [f"- Image `{group}`: `{image}`" for group, image in summary["groups"].items()]
+
+    trouble = [node for node in nodes if node.state in ("failed", "pending")]
+    if trouble:
+        lines += ["", "| Node | State | Exit code | Reason |", "|---|---|---|---|"]
+        lines += [
+            f"| {n.node} | {n.state} | {'' if n.exit_code is None else n.exit_code} "
+            f"| {n.reason or ''} |"
+            for n in trouble
+        ]
+    return "\n".join(lines) + "\n"
+
+
 def _node_order(node: NodeStatus):
     # node-2 before node-10
     return node.group, len(node.node), node.node
@@ -362,4 +386,7 @@ class RunNodesExperiment(BaseExperiment[ExpConfig]):
             )
         if summary.get("publish_failed"):
             self.fail_run(f"{summary['publish_failed']} of {summary['published']} publishes failed")
+        (self.output_folder / "summary.md").write_text(
+            render_summary(summary, nodes, self._failures)
+        )
         self.log_event("internal_run_finished")
