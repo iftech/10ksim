@@ -1,7 +1,7 @@
 name: Run nodes
 
 # Runs an experiment from a config YAML kept in another repository, e.g. `run-nodes`.
-# Needs the `p2p-runs` environment: secret KUBECONFIG, variable RUN_NODES_NAMESPACE.
+# Needs the `experiments` environment with secret KUBECONFIG_LIBP2P_TEAM.
 
 on:
   workflow_dispatch:
@@ -28,12 +28,12 @@ jobs:
   run:
     name: Run
     runs-on: ubuntu-latest
-    environment: p2p-runs
+    environment: experiments
     timeout-minutes: 120
     env:
       REPO: ${{ inputs.repo }}
       CONFIG: ${{ inputs.config }}
-      NAMESPACE: ${{ vars.RUN_NODES_NAMESPACE }}
+      NAMESPACE: libp2p-team
     steps:
       - uses: actions/checkout@v4
 
@@ -51,7 +51,6 @@ jobs:
             /* | *..*) echo "::error::config must be a relative path inside $REPO"; exit 1 ;;
           esac
           test -f "scenario/$CONFIG" || { echo "::error::$CONFIG not found in $REPO"; exit 1; }
-          test -n "$NAMESPACE" || { echo "::error::RUN_NODES_NAMESPACE is not set"; exit 1; }
 
       - uses: astral-sh/setup-uv@v6
         with:
@@ -61,7 +60,7 @@ jobs:
 
       - name: Write kubeconfig
         env:
-          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_LIBP2P_TEAM }}
         run: |
           umask 077
           printf '%s' "$KUBECONFIG_DATA" > "$RUNNER_TEMP/kubeconfig"
