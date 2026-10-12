@@ -1,0 +1,18 @@
+experiment: run-nodes
+duration: 600
+nodes:
+  - name: bootstrap
+    image: {repo: albertodst/regression-bootstrap-amd64, tag: v.2.4.0}
+    count: 1
+  - name: node
+    image: {repo: albertodst/regression-node-amd64, tag: v2.4.0}
+    count: 50
+    env:
+      SERVICE: bootstrap-0.nodes
+      MUXER: yamux
+publish:
+  group: node
+  messages: 100
+  message_size_bytes: 1000
+  delay: 1
+  start_after: 120
