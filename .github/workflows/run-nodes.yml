@@ -1,0 +1,93 @@
+name: Run nodes
+
+# Runs an experiment from a config YAML kept in another repository, e.g. `run-nodes`.
+# Needs the `experiments` environment with secret KUBECONFIG_LIBP2P_TEAM.
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Repository holding the config, e.g. iftech/nim-libp2p"
+        required: true
+      ref:
+        description: "Branch, tag or commit of that repository (default branch if empty)"
+        required: false
+        default: ""
+      config:
+        description: "Path to the config YAML in that repository"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: run-nodes
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: Run
+    runs-on: ubuntu-latest
+    environment: experiments
+    timeout-minutes: 120
+    env:
+      REPO: ${{ inputs.repo }}
+      CONFIG: ${{ inputs.config }}
+      NAMESPACE: libp2p-team
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the config repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repo }}
+          ref: ${{ inputs.ref }}
+          path: scenario
+          persist-credentials: false
+
+      - name: Check inputs
+        run: |
+          case "$CONFIG" in
+            /* | *..*) echo "::error::config must be a relative path inside $REPO"; exit 1 ;;
+          esac
+          test -f "scenario/$CONFIG" || { echo "::error::$CONFIG not found in $REPO"; exit 1; }
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.10.9"
+
+      - run: uv sync --frozen
+
+      - name: Write kubeconfig
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_LIBP2P_TEAM }}
+        run: |
+          umask 077
+          printf '%s' "$KUBECONFIG_DATA" > "$RUNNER_TEMP/kubeconfig"
+
+      - name: Run
+        run: >
+          uv run python deployment.py
+          --values "scenario/$CONFIG"
+          --config "$RUNNER_TEMP/kubeconfig"
+          -l "$RUNNER_TEMP/out"
+          --namespace "$NAMESPACE"
+
+      - name: Report
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/out/summary.md" ]; then
+            cat "$RUNNER_TEMP/out/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## Run did not finish, see the Run step log" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "- Config: \`$REPO@$(git -C scenario rev-parse HEAD):$CONFIG\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-${{ github.run_id }}
+          path: ${{ runner.temp }}/out
+          retention-days: 14
+          if-no-files-found: ignore
