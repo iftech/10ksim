@@ -121,6 +121,7 @@ def _bootstrap_host(
     start_sleep: int,
     metrics_interval_s: int,
     lsquic_tick_floor_us: int,
+    binary: str = "./main",
 ) -> dict:
     """The kad-dht anchor (bootstrap-0); peers discover through it by hostname."""
     env = {
@@ -141,7 +142,7 @@ def _bootstrap_host(
         "network_node_id": 0,
         "processes": [
             {
-                "path": "./main",
+                "path": binary,
                 "start_time": "5s",
                 "expected_final_state": "running",
                 "environment": env,
@@ -215,6 +216,7 @@ def render_shadow_yaml(
     loss_pct: float = 0.0,
     hosts_per_subnet: int = 1,
     requester_app_path: str = _REQUESTER_APP_PATH,
+    bootstrap_binary: str = "./main",
 ) -> dict:
     """Build the shadow.yaml dict: N peer hosts running `./main` + a publisher host
     running the pod-api-requester in batch mode against the peers' `/publish`
@@ -247,6 +249,7 @@ def render_shadow_yaml(
             start_sleep=start_sleep,
             metrics_interval_s=metrics_interval_s,
             lsquic_tick_floor_us=lsquic_tick_floor_us,
+            binary=bootstrap_binary,
         )
     hosts["publisher"] = _publisher_host(publisher_start_s, requester_app_path)
 
@@ -377,6 +380,22 @@ def build_configmap(
     )
 
 
+def _fetch_binary(name: str, image: str, binary: str) -> V1Container:
+    """Init container copying an image's /node/main into the shared bin volume."""
+    return V1Container(
+        name=name,
+        image=image,
+        image_pull_policy="Always",
+        # image ENTRYPOINT is the binary; override to copy it out
+        command=[
+            "sh",
+            "-c",
+            f"cp /node/main {_BIN_MOUNT}/{binary} && chmod +x {_BIN_MOUNT}/{binary}",
+        ],
+        volume_mounts=[V1VolumeMount(name="bin", mount_path=_BIN_MOUNT)],
+    )
+
+
 def build_shadow_job(
     *,
     namespace: str,
@@ -385,6 +404,7 @@ def build_shadow_job(
     pvc_name: str,
     test_node_image: str,
     shadow_base_image: str,
+    bootstrap_image: Optional[str] = None,
     node_pin: Optional[str] = None,
     cpu_request: str = "2",
     cpu_limit: str = "4",
@@ -393,14 +413,11 @@ def build_shadow_job(
 ) -> V1Job:
     """k8s Job that runs Shadow: init container stages the nim binary, main container
     is the Shadow runner."""
-    init_container = V1Container(
-        name="fetch-test-node",
-        image=test_node_image,
-        image_pull_policy="Always",
-        # image ENTRYPOINT is the binary; override to copy it out
-        command=["sh", "-c", f"cp /node/main {_BIN_MOUNT}/main && chmod +x {_BIN_MOUNT}/main"],
-        volume_mounts=[V1VolumeMount(name="bin", mount_path=_BIN_MOUNT)],
-    )
+    init_containers = [_fetch_binary("fetch-test-node", test_node_image, "main")]
+    binaries = ["main"]
+    if bootstrap_image:
+        init_containers.append(_fetch_binary("fetch-bootstrap", bootstrap_image, "bootstrap"))
+        binaries.append("bootstrap")
 
     # Stage binary + config into the PVC run dir, then exec Shadow.
     main_command = [
@@ -408,8 +425,8 @@ def build_shadow_job(
         "-eu",
         "-c",
         (
-            f"cp {_BIN_MOUNT}/main {_RUN_MOUNT}/main && "
-            f"cp {_CONFIG_MOUNT}/shadow.yaml {_RUN_MOUNT}/shadow.yaml && "
+            "".join(f"cp {_BIN_MOUNT}/{b} {_RUN_MOUNT}/{b} && " for b in binaries)
+            + f"cp {_CONFIG_MOUNT}/shadow.yaml {_RUN_MOUNT}/shadow.yaml && "
             f"cd {_RUN_MOUNT} && "
             "exec shadow shadow.yaml"
         ),
@@ -433,7 +450,7 @@ def build_shadow_job(
 
     pod_spec = V1PodSpec(
         restart_policy="Never",
-        init_containers=[init_container],
+        init_containers=init_containers,
         containers=[main_container],
         volumes=[
             V1Volume(name="bin", empty_dir=V1EmptyDirVolumeSource()),

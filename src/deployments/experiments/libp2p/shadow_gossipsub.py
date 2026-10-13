@@ -60,6 +60,8 @@ class ExpConfig(BaseModel):
     # Images (explicit tags let old runs be replayed).
     test_node_image: str = "radiken/dst-test-node-shadow:latest"
     shadow_base_image: str = "radiken/dst-shadow-base:latest"
+    # Anchor binary for two-binary node images; unset runs the anchor from test_node_image.
+    bootstrap_image: Optional[str] = None
     node_pin: Optional[str] = "node-05.ih-eu-mda1.misc.vaclab"  # avoid node-01 (control plane)
     pvc_storage: str = "5Gi"  # run PVC for shadow.data/ (~200KB/peer)
     wait_timeout_s: NonNegativeInt = 1800
@@ -104,6 +106,7 @@ class ShadowGossipsubExperiment(BaseExperiment[ExpConfig]):
             bandwidth_mbit=cfg.bandwidth_mbit,
             loss_pct=cfg.loss_pct,
             hosts_per_subnet=cfg.hosts_per_subnet,
+            bootstrap_binary="./bootstrap" if cfg.bootstrap_image else "./main",
         )
         publisher_config = render_publisher_config(
             num_nodes=cfg.num_nodes,
@@ -126,6 +129,7 @@ class ShadowGossipsubExperiment(BaseExperiment[ExpConfig]):
             pvc_name=pvc_name,
             test_node_image=cfg.test_node_image,
             shadow_base_image=cfg.shadow_base_image,
+            bootstrap_image=cfg.bootstrap_image,
             node_pin=cfg.node_pin,
             cpu_request=cfg.cpu_request,
             cpu_limit=cfg.cpu_limit,
