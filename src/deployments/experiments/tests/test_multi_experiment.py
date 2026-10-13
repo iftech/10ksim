@@ -4,6 +4,7 @@ from typing import ClassVar, List
 import pytest
 from kubernetes.client import ApiClient
 
+from src.deployments.experiments.base_experiment import ExperimentFailed
 from src.deployments.experiments.multi_experiment import Config, Multiple
 
 
@@ -75,7 +76,7 @@ async def test_multiple_runs_child_analysis_after_all_experiments(monkeypatch, t
 
 
 @pytest.mark.asyncio
-async def test_multiple_skips_analysis_for_failed_child_experiments(monkeypatch, tmp_path):
+async def test_a_crashed_child_is_not_analysed_and_fails_the_sweep(monkeypatch, tmp_path):
     events = []
 
     class ChildExperiment:
@@ -117,7 +118,8 @@ async def test_multiple_skips_analysis_for_failed_child_experiments(monkeypatch,
         output_folder=tmp_path,
     )
 
-    await experiment._run()
+    with pytest.raises(ExperimentFailed, match="child failed"):
+        await experiment.run(run_post_analysis=False)
 
     assert events == [
         ("run", "failed", False),
