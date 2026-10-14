@@ -183,6 +183,6 @@ class ShadowGossipsubExperiment(BaseExperiment[ExpConfig]):
             self.log_event({"event": "pvc_retained", "pvc": pvc_name})
 
         if state == "failed":
-            raise RuntimeError(f"Shadow Job `{namespace}/{job_name}` failed")
+            self.fail_run(f"Shadow Job `{namespace}/{job_name}` failed")
 
         self.log_event("internal_run_finished")

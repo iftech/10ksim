@@ -1,4 +1,5 @@
 # Python Imports
+import os
 from typing import Optional
 
 from kubernetes import client
@@ -9,7 +10,7 @@ _kube_config = None
 
 def set_config_file(config: str):
     global _kube_config
-    _kube_config = config
+    _kube_config = os.path.expanduser(config)
 
 
 def get_config_file() -> Optional[str]:

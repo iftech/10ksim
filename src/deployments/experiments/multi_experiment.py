@@ -122,6 +122,7 @@ class Multiple(BaseExperiment[Config]):
                 completed_experiments.append(experiment)
             except Exception as e:
                 logger.error(f"Experiment failed. Exception: {e} {traceback.format_exc()}")
+                invalid.append(f"{params_str}: {e!r}")
             else:
                 completed_experiments.append(experiment)
 
