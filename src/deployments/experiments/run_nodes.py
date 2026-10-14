@@ -3,7 +3,11 @@
 A node signals a failed check by exiting non-zero, so the run needs no knowledge of what
 the node does. Each group runs as an Indexed Job: a StatefulSet would restart a node that
 exits and lose its exit code. Groups start in order, each once the previous is up, so a
-bootstrap group goes first.
+bootstrap group goes first. A node that exits non-zero is a result of the run, not a failure
+of it: the run only fails when it could not start its nodes.
+
+Without self-terminating groups the nodes run for `duration`. With them, the run ends once
+those nodes have all exited, `duration` is their timeout, and the other nodes are stopped.
 
 Node i of group g is reachable as `g-<i>.nodes` and gets NODE_INDEX and NUM_NODES (its
 group's size) in its environment, plus the group's own `env`.
@@ -16,7 +20,7 @@ import random
 import time
 from collections import Counter
 from dataclasses import asdict, dataclass
-from typing import Callable, Dict, List, Literal, Optional, Tuple
+from typing import Callable, Dict, List, Literal, Optional, Set, Tuple
 
 from kubernetes import client
 from kubernetes.client import (
@@ -72,6 +76,8 @@ class NodeGroup(BaseModel):
     count: NonNegativeInt
     """0 skips the group."""
     env: Dict[str, str] = {}
+    self_terminating: bool = False
+    """Nodes end by themselves; the run ends once they all have."""
 
 
 class PublishConfig(BaseModel):
@@ -94,7 +100,7 @@ class ExpConfig(BaseModel):
 
     nodes: List[NodeGroup] = Field(min_length=1)
     duration: NonNegativeInt = 600
-    """Seconds the nodes run once all have started."""
+    """Seconds the nodes run once all have started; the timeout for self-terminating ones."""
     startup_timeout: PositiveInt = 300
     """Seconds every node gets to start, image pull included."""
     poll_interval: PositiveInt = 5
@@ -119,6 +125,10 @@ class ExpConfig(BaseModel):
     @property
     def num_nodes(self) -> int:
         return sum(group.count for group in self.nodes)
+
+    @property
+    def terminating(self) -> List[NodeGroup]:
+        return [group for group in self.nodes if group.self_terminating and group.count]
 
 
 @dataclass
@@ -209,26 +219,48 @@ def summarize(nodes: List[NodeStatus], num_nodes: int) -> dict:
     }
 
 
-def render_summary(summary: dict, nodes: List[NodeStatus], failures: List[str]) -> str:
+def node_problem(node: NodeStatus, terminating: Set[str]) -> Optional[str]:
+    """What went wrong with a node, or None."""
+    if node.state == "pending":
+        return node.reason or "never started"
+    if node.state == "failed":
+        return node.reason
+    if node.state == "running" and node.group in terminating:
+        return "still running at the timeout"
+    return None
+
+
+def render_summary(
+    summary: dict, nodes: List[NodeStatus], run_errors: List[str], terminating: Set[str]
+) -> str:
     """Markdown report of a run, for the GitHub run page."""
-    lines = [f"## run-nodes: {'failed' if failures else 'passed'}", ""]
-    lines += [f"- {reason}" for reason in failures] + ([""] if failures else [])
+    bad_nodes = summary["failed"] + summary["unfinished"]
+    verdict = []
+    if bad_nodes:
+        verdict.append(f"{bad_nodes} of {summary['num_nodes']} nodes failed")
+    if summary.get("publish_failed"):
+        verdict.append(f"{summary['publish_failed']} of {summary['published']} publishes failed")
+    headline = "run error" if run_errors else ", ".join(verdict) or "passed"
+
+    lines = [f"## run-nodes: {headline}", ""]
+    lines += [f"- {reason}" for reason in run_errors] + ([""] if run_errors else [])
     lines += [
         f"- Ended: {summary['ended']} after {summary['run_seconds']}s",
         f"- Nodes: {summary['num_nodes']} ({summary['running']} running, {summary['exited']} "
-        f"exited 0, {summary['failed']} failed, {summary['not_started']} never started)",
+        f"exited 0, {summary['failed']} failed, {summary['unfinished']} did not finish, "
+        f"{summary['not_started']} never started)",
     ]
     if "published" in summary:
         lines.append(f"- Published: {summary['published']} ({summary['publish_failed']} failed)")
     lines += [f"- Image `{group}`: `{image}`" for group, image in summary["groups"].items()]
 
-    trouble = [node for node in nodes if node.state in ("failed", "pending")]
+    trouble = [(n, node_problem(n, terminating)) for n in nodes]
+    trouble = [(n, problem) for n, problem in trouble if problem]
     if trouble:
-        lines += ["", "| Node | State | Exit code | Reason |", "|---|---|---|---|"]
+        lines += ["", "| Node | State | Exit code | Problem |", "|---|---|---|---|"]
         lines += [
-            f"| {n.node} | {n.state} | {'' if n.exit_code is None else n.exit_code} "
-            f"| {n.reason or ''} |"
-            for n in trouble
+            f"| {n.node} | {n.state} | {'' if n.exit_code is None else n.exit_code} | {problem} |"
+            for n, problem in trouble
         ]
     return "\n".join(lines) + "\n"
 
@@ -240,7 +272,7 @@ def _node_order(node: NodeStatus):
 
 @experiment(name="run-nodes")
 class RunNodesExperiment(BaseExperiment[ExpConfig]):
-    """Run groups of nodes; a node that exits non-zero fails the run."""
+    """Run groups of nodes and report which exited non-zero."""
 
     _logged_exits: set = PrivateAttr(default_factory=set)
     _published: List[bool] = PrivateAttr(default_factory=list)
@@ -337,9 +369,13 @@ class RunNodesExperiment(BaseExperiment[ExpConfig]):
         if self.dry_run:
             return
 
+        terminating = {group.name for group in cfg.terminating}
+        watched = {group.name: group.count for group in cfg.terminating or cfg.nodes}
+
         def all_done(nodes):
-            return len(nodes) == cfg.num_nodes and all(
-                node.state in ("exited", "failed") for node in nodes
+            ours = [node for node in nodes if node.group in watched]
+            return len(ours) == sum(watched.values()) and all(
+                node.state in ("exited", "failed") for node in ours
             )
 
         if not all_started:
@@ -351,7 +387,10 @@ class RunNodesExperiment(BaseExperiment[ExpConfig]):
                 address = requester_address(self.namespace)
                 publishing = asyncio.create_task(self._publish(address))
             done = await self._watch(all_done, cfg.duration)
-            ended = "all nodes exited" if done else "duration elapsed"
+            if terminating:
+                ended = "self-terminating nodes exited" if done else "timeout"
+            else:
+                ended = "all nodes exited" if done else "duration elapsed"
             if publishing:
                 publishing.cancel()
                 await asyncio.gather(publishing, return_exceptions=True)
@@ -373,26 +412,28 @@ class RunNodesExperiment(BaseExperiment[ExpConfig]):
             "ended": ended,
             "run_seconds": run_seconds,
             **summarize(nodes, cfg.num_nodes),
+            "unfinished": sum(n.state == "running" and n.group in terminating for n in nodes),
         }
         if cfg.publish:
             summary["published"] = len(self._published)
             summary["publish_failed"] = self._published.count(False)
+        summary["problems"] = (
+            summary["failed"]
+            + summary["unfinished"]
+            + summary["not_started"]
+            + summary.get("publish_failed", 0)
+        )
         self.log_event({"event": "run_summary", **summary})
         (self.output_folder / "node_results.json").write_text(
             json.dumps({**summary, "nodes": [asdict(node) for node in nodes]}, indent=2)
         )
 
-        failed = [f"{n.node} ({n.exit_code})" for n in nodes if n.state == "failed"]
-        if failed:
-            self.fail_run(f"{len(failed)} of {cfg.num_nodes} nodes exited non-zero: {failed}")
         if summary["not_started"]:
             reasons = sorted({str(n.reason) for n in nodes if n.state == "pending"})
             self.fail_run(
                 f"{summary['not_started']} of {cfg.num_nodes} nodes never started: {reasons}"
             )
-        if summary.get("publish_failed"):
-            self.fail_run(f"{summary['publish_failed']} of {summary['published']} publishes failed")
         (self.output_folder / "summary.md").write_text(
-            render_summary(summary, nodes, self._failures)
+            render_summary(summary, nodes, self._failures, terminating)
         )
         self.log_event("internal_run_finished")
