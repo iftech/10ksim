@@ -69,7 +69,8 @@ class NodeGroup(BaseModel):
     name: str = Field(pattern=r"^[a-z]([-a-z0-9]{0,38}[a-z0-9])?$")
     """Job name; its nodes are `<name>-<i>`."""
     image: Image
-    count: PositiveInt
+    count: NonNegativeInt
+    """0 skips the group."""
     env: Dict[str, str] = {}
 
 
@@ -104,9 +105,12 @@ class ExpConfig(BaseModel):
         names = [group.name for group in self.nodes]
         if len(set(names)) != len(names):
             raise ValueError(f"Group names must be unique: {names}")
+        if self.num_nodes == 0:
+            raise ValueError("Every group has count 0, so there is nothing to run")
         if self.publish:
-            if self.publish.group not in names:
-                raise ValueError(f"publish.group `{self.publish.group}` is not in {names}")
+            running = [group.name for group in self.nodes if group.count]
+            if self.publish.group not in running:
+                raise ValueError(f"publish.group `{self.publish.group}` is not in {running}")
             span = self.publish.start_after + self.publish.messages * self.publish.delay
             if span > self.duration:
                 raise ValueError(f"Publishing takes {span}s, longer than duration {self.duration}s")
@@ -276,6 +280,8 @@ class RunNodesExperiment(BaseExperiment[ExpConfig]):
         """Deploy the groups in order, each once the previous is up. Returns whether all are."""
         deadline = time.monotonic() + self.config.startup_timeout
         for group in self.config.nodes:
+            if not group.count:
+                continue
             await self.deploy(deployment=build_job(self.namespace, group), wait_for_ready=False)
             if self.dry_run:
                 continue
@@ -362,7 +368,7 @@ class RunNodesExperiment(BaseExperiment[ExpConfig]):
 
         nodes = sorted(self._poll().values(), key=_node_order)
         summary = {
-            "groups": {group.name: str(group.image) for group in cfg.nodes},
+            "groups": {group.name: str(group.image) for group in cfg.nodes if group.count},
             "num_nodes": cfg.num_nodes,
             "ended": ended,
             "run_seconds": run_seconds,

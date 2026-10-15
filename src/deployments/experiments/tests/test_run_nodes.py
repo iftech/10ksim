@@ -74,6 +74,8 @@ def test_an_index_without_a_pod_counts_as_not_started():
         ({"nodes": [_group(), _group()]}, "unique"),
         ({"nodes": [_group()], "publish": {"group": "bootstrap"}}, "not in"),
         ({"nodes": [_group()], "duration": 30, "publish": {"group": "node"}}, "longer than"),
+        ({"nodes": [_group(count=0)]}, "nothing to run"),
+        ({"nodes": [_group("a"), _group("b", count=0)], "publish": {"group": "b"}}, "not in"),
     ],
 )
 def test_a_config_that_cannot_run_is_rejected(cfg, error):
@@ -81,7 +83,7 @@ def test_a_config_that_cannot_run_is_rejected(cfg, error):
         ExpConfig(**cfg)
 
 
-def _experiment(tmp_path, mocker, pods, **cfg):
+def _experiment(tmp_path, mocker, pods, groups=None, **cfg):
     mocker.patch.object(RunNodesExperiment, "deploy", mocker.AsyncMock())
     mocker.patch.object(run_nodes, "capture_pod_logs", return_value=len(pods))
     mocker.patch.object(
@@ -89,7 +91,8 @@ def _experiment(tmp_path, mocker, pods, **cfg):
         "_poll",
         return_value={s.node: s for s in map(node_status, pods)},
     )
-    config = ExpConfig(**{"nodes": [_group(count=len(pods))], "poll_interval": 1, **cfg})
+    groups = groups or [_group(count=len(pods))]
+    config = ExpConfig(**{"nodes": groups, "poll_interval": 1, **cfg})
     return RunNodesExperiment(
         api_client=ApiClient(), config=config, namespace="ns", output_folder=tmp_path / "run"
     )
@@ -148,3 +151,13 @@ async def test_a_failed_publish_fails_the_run(tmp_path, mocker):
     )
     with pytest.raises(ExperimentFailed, match="1 of 2 publishes failed"):
         await exp.run()
+
+
+@pytest.mark.asyncio
+async def test_a_group_with_count_0_is_not_deployed(tmp_path, mocker):
+    groups = [_group("node", count=1), _group("off", count=0)]
+    exp = _experiment(tmp_path, mocker, [_pod(0, running=True)], groups=groups, duration=0)
+    await exp.run()
+
+    deployed = [call.kwargs["deployment"].metadata.name for call in exp.deploy.call_args_list]
+    assert "node" in deployed and "off" not in deployed
