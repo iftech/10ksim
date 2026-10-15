@@ -74,17 +74,26 @@ jobs:
           --namespace "$NAMESPACE"
 
       - name: Report
+        id: report
         if: always()
         run: |
-          if [ -f "$RUNNER_TEMP/out/summary.md" ]; then
+          RESULTS="$RUNNER_TEMP/out/node_results.json"
+          if [ -f "$RESULTS" ]; then
+            PROBLEMS=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["problems"])' "$RESULTS")
             cat "$RUNNER_TEMP/out/summary.md" >> "$GITHUB_STEP_SUMMARY"
           else
+            PROBLEMS=unknown
             echo "## Run did not finish, see the Run step log" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "- Config: \`$REPO@$(git -C scenario rev-parse HEAD):$CONFIG\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$PROBLEMS" != "0" ]; then
+            echo "- Logs: the \`run-$GITHUB_RUN_ID\` artifact below" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "problems=$PROBLEMS" >> "$GITHUB_OUTPUT"
 
+      # Logs only when there is something to investigate.
       - name: Upload results and logs
-        if: always()
+        if: always() && steps.report.outputs.problems != '0'
         uses: actions/upload-artifact@v4
         with:
           name: run-${{ github.run_id }}
