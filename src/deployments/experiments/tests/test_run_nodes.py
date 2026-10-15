@@ -12,6 +12,7 @@ from src.deployments.experiments.run_nodes import (
     ExpConfig,
     NodeStatus,
     RunNodesExperiment,
+    node_problem,
     node_status,
     summarize,
 )
@@ -75,6 +76,11 @@ def test_an_index_without_a_pod_counts_as_not_started():
         "failed": 1,
         "not_started": 1,
     }
+
+
+def test_a_failed_node_without_a_reason_is_still_a_problem():
+    node = NodeStatus("node-0", "node", "failed", exit_code=3, reason=None)
+    assert node_problem(node, terminating=set()) == "exited 3"
 
 
 @pytest.mark.parametrize(

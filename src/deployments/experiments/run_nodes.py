@@ -224,7 +224,7 @@ def node_problem(node: NodeStatus, terminating: Set[str]) -> Optional[str]:
     if node.state == "pending":
         return node.reason or "never started"
     if node.state == "failed":
-        return node.reason
+        return node.reason or f"exited {node.exit_code}"
     if node.state == "running" and node.group in terminating:
         return "still running at the timeout"
     return None
