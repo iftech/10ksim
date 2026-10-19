@@ -105,9 +105,14 @@ class ExpConfig(BaseModel):
     """Seconds every node gets to start, image pull included."""
     poll_interval: PositiveInt = 5
     publish: Optional[PublishConfig] = None
+    image_tag: Optional[str] = None
+    """Replaces the tag of every group's image."""
 
     @model_validator(mode="after")
     def _check(self):
+        if self.image_tag:
+            for group in self.nodes:
+                group.image = Image(repo=group.image.repo, tag=self.image_tag)
         names = [group.name for group in self.nodes]
         if len(set(names)) != len(names):
             raise ValueError(f"Group names must be unique: {names}")
