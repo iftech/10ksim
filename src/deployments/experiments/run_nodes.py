@@ -192,10 +192,16 @@ def build_job(namespace: str, group: NodeGroup) -> V1Job:
     )
 
 
-def node_status(pod: V1Pod) -> NodeStatus:
+def node_name(pod: V1Pod) -> str:
     labels = pod.metadata.labels or {}
-    group = labels.get("group", "")
-    node = f"{group}-{labels[INDEX_LABEL]}" if INDEX_LABEL in labels else pod.metadata.name
+    if INDEX_LABEL not in labels:
+        return pod.metadata.name
+    return f"{labels.get('group', '')}-{labels[INDEX_LABEL]}"
+
+
+def node_status(pod: V1Pod) -> NodeStatus:
+    group = (pod.metadata.labels or {}).get("group", "")
+    node = node_name(pod)
     statuses = pod.status.container_statuses or []
     if not statuses:
         return NodeStatus(node, group, "pending", reason=pod.status.phase)
@@ -252,12 +258,12 @@ def render_summary(
     lines += [
         f"- Ended: {summary['ended']} after {summary['run_seconds']}s",
         f"- Nodes: {summary['num_nodes']} ({summary['running']} running, {summary['exited']} "
-        f"exited 0, {summary['failed']} failed, {summary['unfinished']} did not finish, "
+        f"succeeded, {summary['failed']} failed, {summary['unfinished']} did not finish, "
         f"{summary['not_started']} never started)",
     ]
     if "published" in summary:
         lines.append(f"- Published: {summary['published']} ({summary['publish_failed']} failed)")
-    lines += [f"- Image `{group}`: `{image}`" for group, image in summary["groups"].items()]
+    lines += [f"- Node `{group}`: `{image}`" for group, image in summary["groups"].items()]
 
     trouble = [(n, node_problem(n, terminating)) for n in nodes]
     trouble = [(n, problem) for n, problem in trouble if problem]
@@ -404,9 +410,10 @@ class RunNodesExperiment(BaseExperiment[ExpConfig]):
         captured = await asyncio.to_thread(
             capture_pod_logs,
             self.namespace,
-            self.output_folder / "kubectl_logs",
+            self.output_folder / "node_logs",
             self.api_client,
             label_selector=f"app={APP}",
+            filename=node_name,
         )
         self.log_event({"event": "log_capture_finished", "pods": captured})
 
