@@ -16,6 +16,10 @@ on:
       config:
         description: "Path to the config YAML in that repository"
         required: true
+      tag:
+        description: "Image tag for every node, replacing the config's tags (optional)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -33,6 +37,7 @@ jobs:
     env:
       REPO: ${{ inputs.repo }}
       CONFIG: ${{ inputs.config }}
+      TAG: ${{ inputs.tag }}
       NAMESPACE: libp2p-team
     steps:
       - uses: actions/checkout@v4
@@ -66,12 +71,11 @@ jobs:
           printf '%s' "$KUBECONFIG_DATA" > "$RUNNER_TEMP/kubeconfig"
 
       - name: Run
-        run: >
-          uv run python deployment.py
-          --values "scenario/$CONFIG"
-          --config "$RUNNER_TEMP/kubeconfig"
-          -l "$RUNNER_TEMP/out"
-          --namespace "$NAMESPACE"
+        run: |
+          args=(--values "scenario/$CONFIG" --config "$RUNNER_TEMP/kubeconfig")
+          args+=(-l "$RUNNER_TEMP/out" --namespace "$NAMESPACE")
+          if [ -n "$TAG" ]; then args+=(--image-tag "$TAG"); fi
+          uv run python deployment.py "${args[@]}"
 
       - name: Report
         id: report
@@ -86,6 +90,7 @@ jobs:
             echo "## Run did not finish, see the Run step log" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "- Config: \`$REPO@$(git -C scenario rev-parse HEAD):$CONFIG\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$TAG" ]; then echo "- Tag override: \`$TAG\`" >> "$GITHUB_STEP_SUMMARY"; fi
           if [ "$PROBLEMS" != "0" ]; then
             echo "- Logs: the \`run-$GITHUB_RUN_ID\` artifact below" >> "$GITHUB_STEP_SUMMARY"
           fi
