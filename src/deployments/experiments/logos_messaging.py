@@ -164,6 +164,11 @@ def payload_msg_id(payload: str) -> Optional[str]:
     return head.decode(errors="replace") if sep else None
 
 
+def send_event_targets(pending: Dict[str, Set[str]], unacknowledged: Set[str]) -> List[str]:
+    """Nodes with an open request, or with a send whose reply never came back."""
+    return sorted({pod for pod, request_ids in pending.items() if request_ids} | unacknowledged)
+
+
 class ApiRecorder:
     """Appends API records as JSON lines, one file per kind."""
 
@@ -185,6 +190,7 @@ class LogosMessagingExperiment(BaseExperiment[ExpConfig]):
     _recorder: Optional[ApiRecorder] = None
     _pending: Dict[str, Set[str]] = {}
     _finished: Set[str] = set()
+    _unacknowledged: Set[str] = set()
 
     def _get_metadata(self) -> dict:
         return MessagingBridge().get_metadata(self.events_log_path)
@@ -210,6 +216,8 @@ class LogosMessagingExperiment(BaseExperiment[ExpConfig]):
         except (*REQUEST_ERRORS, KeyError) as e:
             record["status"] = None
             record["error"] = str(e)
+        if "requestId" not in record:
+            self._unacknowledged.add(pod)
         record["done_ns"] = time.time_ns()
         self._recorder.write("sends", record)
 
@@ -274,7 +282,7 @@ class LogosMessagingExperiment(BaseExperiment[ExpConfig]):
         while True:
             started = time.monotonic()
             await asyncio.gather(*(self._poll_received(requester, pod) for pod in pods))
-            senders = [pod for pod, pending in self._pending.items() if pending]
+            senders = send_event_targets(self._pending, self._unacknowledged)
             await asyncio.gather(*(self._poll_send_events(requester, pod) for pod in senders))
             if stop.is_set():
                 return
@@ -303,6 +311,7 @@ class LogosMessagingExperiment(BaseExperiment[ExpConfig]):
         self._recorder = ApiRecorder(Path(self.output_folder) / API_DIR)
         self._pending = defaultdict(set)
         self._finished = set()
+        self._unacknowledged = set()
 
         requester_builder = (
             PodApiRequesterBuilder().with_namespace(self.namespace).with_mode("server")
