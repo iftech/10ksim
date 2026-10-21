@@ -8,6 +8,7 @@ from src.analysis.post_run.logos_messaging import (
     parse_metrics,
     parse_received_line,
     propagation_time,
+    reply_lost_sends,
     send_outcomes,
     seq_gaps,
     settings_reliability,
@@ -116,13 +117,30 @@ def test_send_outcomes_sort_event_sequences():
         {"requestId": "r2", "kind": "error"},
     ]
 
-    result = send_outcomes(sends, events)
+    result = send_outcomes(sends, accepted_sends(sends), events)
 
     assert result["accepted"] == 3
     assert result["propagated_only"] == 1
     assert result["error"] == 1
     assert result["no_events"] == 1
     assert [f["msg_id"] for f in result["http_failures"]] == ["d"]
+
+
+def test_send_with_lost_reply_is_matched_by_hash_on_its_node():
+    sends = [send("a", "relay-0-0", status=None), send("b", "relay-0-1", status=None)]
+    events = [
+        {"node": "relay-0-0", "requestId": "r9", "kind": "propagated", "messageHash": "0xa"},
+        {"node": "relay-0-2", "requestId": "r8", "kind": "propagated", "messageHash": "0xb"},
+    ]
+
+    lost = reply_lost_sends(sends, events, {"a": "0xa", "b": "0xb"})
+    result = send_outcomes(sends, lost, events)
+
+    assert list(lost) == ["a"]
+    assert lost["a"]["requestId"] == "r9"
+    assert result["reply_lost"] == ["a"]
+    assert result["propagated_only"] == 1
+    assert [f["msg_id"] for f in result["http_failures"]] == ["b"]
 
 
 def test_delivery_latency_uses_first_line_at_other_nodes():

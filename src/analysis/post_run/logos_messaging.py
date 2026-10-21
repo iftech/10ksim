@@ -164,14 +164,35 @@ def metrics_check(receipts: Receipts, metrics: Dict[str, Dict[str, float]]) -> d
     }
 
 
-def send_outcomes(sends: List[dict], send_events: List[dict]) -> dict:
-    """Every accepted send should end with exactly one `propagated` event."""
+def reply_lost_sends(
+    sends: List[dict], send_events: List[dict], hashes: Dict[str, str]
+) -> Dict[str, dict]:
+    """Sends without a reply whose node still reported events for that message.
+
+    Matched by message hash on the sending node; the record gets the node's `requestId`.
+    """
+    request_ids = {
+        (event["node"], event["messageHash"]): event["requestId"]
+        for event in send_events
+        if event.get("messageHash")
+    }
+    lost = {}
+    for send in sends:
+        if send.get("requestId") or send["msg_id"] not in hashes:
+            continue
+        request_id = request_ids.get((send["node"], hashes[send["msg_id"]]))
+        if request_id:
+            lost[send["msg_id"]] = {**send, "requestId": request_id}
+    return lost
+
+
+def send_outcomes(sends: List[dict], taken: Dict[str, dict], send_events: List[dict]) -> dict:
+    """Every send the node took should end with exactly one `propagated` event."""
     kinds: Dict[str, List[str]] = defaultdict(list)
     for event in send_events:
         kinds[event["requestId"]].append(event["kind"])
-    accepted = accepted_sends(sends)
     outcomes = {"propagated_only": 0, "error": 0, "no_events": 0, "other": []}
-    for send in accepted.values():
+    for send in taken.values():
         events = kinds.get(send["requestId"], [])
         if events == ["propagated"]:
             outcomes["propagated_only"] += 1
@@ -184,11 +205,12 @@ def send_outcomes(sends: List[dict], send_events: List[dict]) -> dict:
     http_failures = [
         {"msg_id": s["msg_id"], "status": s.get("status"), "error": s.get("error")}
         for s in sends
-        if s["msg_id"] not in accepted
+        if s["msg_id"] not in taken
     ]
     return {
         "sent": len(sends),
-        "accepted": len(accepted),
+        "accepted": len(taken),
+        "reply_lost": sorted(m for m, s in taken.items() if s.get("status") != 200),
         "http_failures": http_failures,
         **outcomes,
     }
@@ -380,12 +402,12 @@ def summarize(
     log_data: Optional[Tuple[Receipts, Dict[Tuple[str, str], int]]],
     received_lines: List[Tuple[str, str, int]],
 ) -> dict:
-    accepted = accepted_sends(sends)
     receipts, duplicates = live_receipts(received)
     timestamps = message_timestamps(received)
     hashes = {r["msg_id"]: r["messageHash"] for r in received if r.get("msg_id")}
+    taken = {**accepted_sends(sends), **reply_lost_sends(sends, send_events, hashes)}
     gaps = seq_gaps(received)
-    delivered = delivery(accepted, receipts, nodes)
+    delivered = delivery(taken, receipts, nodes)
     summary = {
         "nodes": len(nodes),
         "delivery": delivered,
@@ -394,7 +416,7 @@ def summarize(
         "history_reads": sum(1 for r in received if r.get("source") != "live"),
         "seq_gaps": {"total": sum(gaps.values()), "by_node": {n: g for n, g in gaps.items() if g}},
         "metrics": metrics_check(receipts, metrics),
-        "sends": send_outcomes(sends, send_events),
+        "sends": send_outcomes(sends, taken, send_events),
         "poll_errors": len(poll_errors),
         "reliability_off": {
             "nodes_checked": len(settings),
@@ -402,14 +424,14 @@ def summarize(
         },
         "latency_ms": {
             "delivery": distribution_ms(
-                delivery_latency(accepted, hashes, timestamps, received_lines)
+                delivery_latency(taken, hashes, timestamps, received_lines)
             ),
-            "propagation": distribution_ms(propagation_time(accepted, send_events, timestamps)),
+            "propagation": distribution_ms(propagation_time(taken, send_events, timestamps)),
         },
     }
     if log_data is not None:
         log_receipts, log_times = log_data
-        summary["logs"] = log_check(accepted, receipts, hashes, log_receipts)
+        summary["logs"] = log_check(taken, receipts, hashes, log_receipts)
         summary["latency_ms"]["relay"] = distribution_ms(
             relay_latency(hashes, timestamps, log_times)
         )
@@ -424,7 +446,8 @@ def report(summary: dict) -> None:
         f"Delivery: {d['observed']}/{d['expected']} receipts (residual {d['residual']}), "
         f"{d['messages_complete']}/{len(d['per_message'])} messages at all "
         f"{d['expected_per_message']} other nodes, self receipts {d['self_receipts']}",
-        f"Sends: {s['accepted']}/{s['sent']} accepted, {s['propagated_only']} propagated only, "
+        f"Sends: {s['accepted']}/{s['sent']} accepted, {len(s['reply_lost'])} with the reply lost, "
+        f"{s['propagated_only']} propagated only, "
         f"{s['error']} error, {s['no_events']} no events, {len(s['other'])} other",
         f"Client losses: seq gaps {summary['seq_gaps']['total']}, "
         f"received dropped {m['received_dropped']}, send dropped {m['send_dropped']}, "
