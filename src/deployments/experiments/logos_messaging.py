@@ -145,6 +145,7 @@ class LogosMessagingExperiment(BaseExperiment[ExpConfig]):
     """Relay nodes on the Messaging API, sent to over REST and measured from their logs."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+    post_run_analysis = "src.analysis.post_run.logos_messaging:run_logos_messaging_analysis"
 
     def _get_metadata(self) -> dict:
         return MessagingBridge().get_metadata(self.events_log_path)
