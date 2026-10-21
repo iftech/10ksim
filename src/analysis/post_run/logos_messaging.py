@@ -4,6 +4,7 @@ import json
 import logging
 import re
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
 
@@ -25,6 +26,11 @@ logger = logging.getLogger(__name__)
 VICTORIA_LOGS_URL = "https://vlselect.lab.vac.dev/select/logsql/query"
 RECEIVED_CSV = Path("summary") / "received.csv"
 SETTINGS_LINE = "Messaging API settings"
+RECEIVED_LINE = "Message received"
+EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+RECEIVED_LINE_RE = re.compile(
+    r"^\w{3} (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+[+-]\d\d:\d\d) Message received.*?msg_hash=(0x[0-9a-f]+)"
+)
 METRIC_LINE = re.compile(r"^(logos_delivery_\w+(?:\{[^}]*\})?)\s+([-+\deE.]+)$")
 
 Receipts = Dict[str, Set[str]]
@@ -193,20 +199,6 @@ def message_timestamps(received: List[dict]) -> Dict[str, int]:
     return {r["msg_id"]: r["timestamp"] for r in received if r.get("msg_id") and r.get("timestamp")}
 
 
-def end_to_end_latency(sends: Dict[str, dict], received: List[dict]) -> List[int]:
-    """POST to the first live read at each non-sender node, on the harness clock (ns)."""
-    first_read: Dict[Tuple[str, str], int] = {}
-    for record in received:
-        key = (record.get("msg_id"), record["node"])
-        if record.get("source") == "live" and key not in first_read:
-            first_read[key] = record["poll_ns"]
-    return [
-        poll_ns - sends[msg_id]["post_ns"]
-        for (msg_id, node), poll_ns in first_read.items()
-        if msg_id in sends and node != sends[msg_id]["node"]
-    ]
-
-
 def propagation_time(
     sends: Dict[str, dict], send_events: List[dict], timestamps: Dict[str, int]
 ) -> List[int]:
@@ -256,6 +248,36 @@ def relay_latency(
     return [ns - by_hash[h] for (h, _node), ns in log_received_ns.items() if h in by_hash]
 
 
+def parse_received_line(line: str) -> Optional[Tuple[str, int]]:
+    """Message hash and node-clock time (ns) of a `Message received` line."""
+    match = RECEIVED_LINE_RE.match(line)
+    if not match:
+        return None
+    since_epoch = datetime.fromisoformat(match.group(1)) - EPOCH
+    seconds = since_epoch.days * 86_400 + since_epoch.seconds
+    return match.group(2), seconds * 1_000_000_000 + since_epoch.microseconds * 1_000
+
+
+def delivery_latency(
+    sends: Dict[str, dict],
+    hashes: Dict[str, str],
+    timestamps: Dict[str, int],
+    lines: List[Tuple[str, str, int]],
+) -> List[int]:
+    """First `Message received` line per (message, node) minus the message timestamp (ns).
+
+    `lines` holds (node, message hash, line time). Senders are left out.
+    """
+    by_hash = {hashes[m]: m for m in sends if m in hashes and m in timestamps}
+    first: Dict[Tuple[str, str], int] = {}
+    for node, msg_hash, line_ns in lines:
+        msg_id = by_hash.get(msg_hash)
+        if msg_id is None or node == sends[msg_id]["node"]:
+            continue
+        first[(msg_id, node)] = min(line_ns, first.get((msg_id, node), line_ns))
+    return [line_ns - timestamps[msg_id] for (msg_id, _), line_ns in first.items()]
+
+
 def read_log_receipts(csv_path: Path) -> Tuple[Receipts, Dict[Tuple[str, str], int]]:
     """Receipts and receive times per (hash, pod) from the analyzer's received dump."""
     df = pd.read_csv(csv_path, usecols=["msg_hash", "kubernetes.pod_name", "timestamp"])
@@ -274,35 +296,46 @@ def settings_reliability(line: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def query_settings(experiment: "LogosMessagingExperiment") -> List[dict]:
-    """Each relay's `Messaging API settings` line, from VictoriaLogs over the whole run."""
-    window = experiment.metadata["results"]["complete"]
+def _query_relay_lines(
+    experiment: "LogosMessagingExperiment", text: str, window: str
+) -> List[Tuple[str, str]]:
+    """(pod, line) for every relay log line containing `text` in a metadata window."""
+    bounds = experiment.metadata["results"][window]
     kwargs = {
         "namespace": experiment.namespace or experiment.metadata["stack"].get("namespace"),
-        "start_time": window["start"],
-        "end_time": window["end"],
+        "start_time": bounds["start"],
+        "end_time": bounds["end"],
     }
     config = (
         VictoriaQueryBuilder()
         .with_url(VICTORIA_LOGS_URL)
         .with_filters(kwargs)
         .with_stateful_set("relay-0", None)
-        .with_query(f'"{SETTINGS_LINE}"')
+        .with_query(f'"{text}"')
         .build_query_config()
     )
     lines = VictoriaReader(None, config).multiline_query_info()
     if lines.is_err():
-        raise RuntimeError(f"Settings query failed: {lines.err_value}")
-    settings = []
-    for raw in lines.ok_value:
-        entry = json.loads(raw)
-        settings.append(
-            {
-                "node": entry.get("kubernetes.pod_name"),
-                "reliability": settings_reliability(entry.get("_msg", "")),
-            }
-        )
-    return settings
+        raise RuntimeError(f"Query for `{text}` failed: {lines.err_value}")
+    entries = (json.loads(raw) for raw in lines.ok_value)
+    return [(e.get("kubernetes.pod_name"), e.get("_msg", "")) for e in entries]
+
+
+def query_settings(experiment: "LogosMessagingExperiment") -> List[dict]:
+    """Each relay's `Messaging API settings` line over the whole run."""
+    return [
+        {"node": pod, "reliability": settings_reliability(line)}
+        for pod, line in _query_relay_lines(experiment, SETTINGS_LINE, "complete")
+    ]
+
+
+def query_received_lines(experiment: "LogosMessagingExperiment") -> List[Tuple[str, str, int]]:
+    """(node, message hash, line time) of every `Message received` line while messages flow."""
+    parsed = (
+        (pod, parse_received_line(line))
+        for pod, line in _query_relay_lines(experiment, RECEIVED_LINE, "messages")
+    )
+    return [(pod, *fields) for pod, fields in parsed if fields]
 
 
 def _pull_logs(experiment: "LogosMessagingExperiment", dump_dir: Path) -> Optional[Path]:
@@ -345,6 +378,7 @@ def summarize(
     poll_errors: List[dict],
     metrics: Dict[str, Dict[str, float]],
     log_data: Optional[Tuple[Receipts, Dict[Tuple[str, str], int]]],
+    received_lines: List[Tuple[str, str, int]],
 ) -> dict:
     accepted = accepted_sends(sends)
     receipts, duplicates = live_receipts(received)
@@ -367,11 +401,10 @@ def summarize(
             "not_false": sorted(s["node"] for s in settings if s.get("reliability") != "false"),
         },
         "latency_ms": {
-            "end_to_end": distribution_ms(end_to_end_latency(accepted, received)),
-            "propagation": distribution_ms(propagation_time(accepted, send_events, timestamps)),
-            "send_round_trip": distribution_ms(
-                [s["done_ns"] - s["post_ns"] for s in accepted.values()]
+            "delivery": distribution_ms(
+                delivery_latency(accepted, hashes, timestamps, received_lines)
             ),
+            "propagation": distribution_ms(propagation_time(accepted, send_events, timestamps)),
         },
     }
     if log_data is not None:
@@ -428,10 +461,15 @@ def run_logos_messaging_analysis(experiment: "LogosMessagingExperiment") -> dict
     }
     dump_dir = out / "analysis_data"
     settings: List[dict] = []
+    received_lines: List[Tuple[str, str, int]] = []
     try:
         settings = query_settings(experiment)
     except Exception:
         logger.exception("Settings query failed")
+    try:
+        received_lines = query_received_lines(experiment)
+    except Exception:
+        logger.exception("`Message received` query failed")
     log_data = None
     try:
         csv_path = _pull_logs(experiment, dump_dir)
@@ -449,6 +487,7 @@ def run_logos_messaging_analysis(experiment: "LogosMessagingExperiment") -> dict
         poll_errors=load_jsonl(api / "poll_errors.jsonl"),
         metrics=metrics,
         log_data=log_data,
+        received_lines=received_lines,
     )
     dump_dir.mkdir(parents=True, exist_ok=True)
     (dump_dir / "messaging_summary.json").write_text(json.dumps(summary, indent=2))

@@ -1,11 +1,12 @@
 from src.analysis.post_run.logos_messaging import (
     accepted_sends,
     delivery,
-    end_to_end_latency,
+    delivery_latency,
     live_receipts,
     log_check,
     metrics_check,
     parse_metrics,
+    parse_received_line,
     propagation_time,
     send_outcomes,
     seq_gaps,
@@ -124,16 +125,26 @@ def test_send_outcomes_sort_event_sequences():
     assert [f["msg_id"] for f in result["http_failures"]] == ["d"]
 
 
-def test_end_to_end_latency_uses_first_live_read_at_other_nodes():
-    sends = accepted_sends([send("a", "relay-0-0", "r1", post_ns=100)])
-    received = [
-        read("a", "relay-0-0", poll_ns=150),
-        read("a", "relay-0-1", poll_ns=300),
-        read("a", "relay-0-1", poll_ns=900),
-        read("a", "relay-0-2", poll_ns=500, source="history"),
+def test_delivery_latency_uses_first_line_at_other_nodes():
+    sends = accepted_sends([send("a", "relay-0-0", "r1")])
+    lines = [
+        ("relay-0-0", "0xa", 1_005),
+        ("relay-0-1", "0xa", 1_030),
+        ("relay-0-1", "0xa", 1_020),
+        ("relay-0-2", "0xother", 1_040),
     ]
 
-    assert end_to_end_latency(sends, received) == [200]
+    assert delivery_latency(sends, {"a": "0xa"}, {"a": 1_000}, lines) == [20]
+
+
+def test_parse_received_line():
+    line = (
+        "INF 2026-10-21 00:10:14.041+00:00 Message received                           tid=8 "
+        "file=recv_service.nim:141 msg_hash=0x61df contentTopic=/dst/1/messaging/proto source=live"
+    )
+
+    assert parse_received_line(line) == ("0x61df", 1792541414041000000)
+    assert parse_received_line("INF 2026-10-21 00:10:14.041+00:00 Received relay message") is None
 
 
 def test_propagation_time_is_on_the_sender_clock():
