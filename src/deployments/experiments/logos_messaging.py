@@ -9,9 +9,10 @@ import time
 from collections import defaultdict
 from datetime import timedelta
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Optional, Set, Tuple
+from typing import Dict, List, Literal, Optional, Set, Tuple
 
 import aiohttp
+from kubernetes.client import V1ExecAction, V1Probe
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -58,7 +59,6 @@ class ExpConfig(BaseModel):
     delay_after_publish: NonNegativeFloat = 1
     poll_interval: PositiveFloat = 1
     post_publish_dwell: NonNegativeFloat = 60
-    connect_timeout: PositiveFloat = 600
     content_topic: str = "/dst/1/messaging/proto"
     cache_capacity: PositiveInt = 1000
     log_level: LogLevel = "INFO"
@@ -118,9 +118,9 @@ def build_relays(namespace: str, config: ExpConfig) -> V1Deployable:
         .with_binary(LOGOS_DELIVERY_BINARY)
         .with_image(config.image)
     )
-    find_waku_container_config(builder.config).command_config.insert_commands(
-        [subscribe_on_start(config.content_topic)], index=0
-    )
+    container = find_waku_container_config(builder.config)
+    container.command_config.insert_commands([subscribe_on_start(config.content_topic)], index=0)
+    container.with_readiness_probe(messaging_readiness_probe(config.content_topic), overwrite=True)
     return builder.build()
 
 
@@ -130,6 +130,24 @@ def subscribe_on_start(content_topic: str) -> str:
     return (
         f"(until curl -sf -o /dev/null -X POST -H 'Content-Type: application/json' "
         f"-d '{body}' localhost:{REST_PORT}/messaging/v1/subscriptions; do sleep 1; done) &"
+    )
+
+
+def messaging_readiness_probe(content_topic: str) -> V1Probe:
+    """Ready once the node is subscribed to the topic and `/health` reports `Connected`."""
+    check = (
+        f"curl -sf localhost:{REST_PORT}/messaging/v1/subscriptions"
+        f" | grep -qF '\"{content_topic}\"'"
+        f" && curl -sf localhost:{REST_PORT}/health"
+        f' | grep -qF \'"connectionStatus":"Connected"\''
+    )
+    return V1Probe(
+        _exec=V1ExecAction(command=["/bin/sh", "-c", check]),
+        success_threshold=5,
+        initial_delay_seconds=5,
+        period_seconds=1,
+        failure_threshold=2,
+        timeout_seconds=5,
     )
 
 
@@ -170,24 +188,6 @@ class LogosMessagingExperiment(BaseExperiment[ExpConfig]):
 
     def _get_metadata(self) -> dict:
         return MessagingBridge().get_metadata(self.events_log_path)
-
-    async def _wait_for(
-        self, requester: Tuple[str, int], pods: List[str], route: str, ready: Callable[[str], bool]
-    ) -> Set[str]:
-        """Polls `route` on every pod until `ready(body)`. Returns the pods that never were."""
-        deadline = time.monotonic() + self.config.connect_timeout
-        pending = set(pods)
-        while pending and time.monotonic() < deadline:
-            for pod in sorted(pending):
-                try:
-                    status, text = await node_call(requester, pod, route)
-                    if status == 200 and ready(text):
-                        pending.discard(pod)
-                except (*REQUEST_ERRORS, KeyError) as e:
-                    logger.warning(f"`{route}` failed on `{pod}`: {e}")
-            if pending:
-                await asyncio.sleep(5)
-        return pending
 
     async def _send(self, requester: Tuple[str, int], index: int, pod: str) -> None:
         msg_id = f"{index:05d}"
@@ -320,27 +320,6 @@ class LogosMessagingExperiment(BaseExperiment[ExpConfig]):
         pods = [f"{relays.metadata.name}-{index}" for index in range(relays.spec.replicas)]
         requester = requester_address(self.namespace)
         await clear_requester_cache(requester)
-
-        topic = self.config.content_topic
-        not_subscribed = await self._wait_for(
-            requester, pods, "/messaging/v1/subscriptions", lambda text: topic in json.loads(text)
-        )
-        if not_subscribed:
-            self.fail_run(f"{len(not_subscribed)} nodes not subscribed: {sorted(not_subscribed)}")
-        self.log_event("subscribed")
-
-        not_connected = await self._wait_for(
-            requester,
-            pods,
-            "/health",
-            lambda text: json.loads(text)["connectionStatus"] == "Connected",
-        )
-        if not_connected:
-            self.fail_run(
-                f"{len(not_connected)} nodes not Connected after "
-                f"{self.config.connect_timeout}s: {sorted(not_connected)}"
-            )
-        self.log_event("connected")
 
         stop = asyncio.Event()
         poller = asyncio.create_task(self._poll_loop(requester, pods, stop))
