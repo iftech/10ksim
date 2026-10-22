@@ -40,6 +40,11 @@ class PodApiRequesterError(PodApiError):
     but pod-api-requester returned an error.
     """
 
+    def __init__(self, message, *, status_code: Optional[int] = None, detail=None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.detail = detail
+
 
 class PodApiResponseError(PodApiError):
     """
@@ -195,6 +200,7 @@ async def pod_api_request(
     *,
     publisher_pod: str | NonNegativeInt = 0,
     requester: Optional[Tuple[str, int]] = None,
+    timeout_s: float = REQUEST_TIMEOUT_S,
 ) -> dict:
     target_ip, node_port = requester or await asyncio.to_thread(
         _get_api_requester_info,
@@ -208,12 +214,10 @@ async def pod_api_request(
 
     logger.info(f"publishing message. url: `{url}` data: `{data}`")
     try:
-        response = await post_async(url, data)
+        response = await post_async(url, data, timeout_s=timeout_s)
         response_obj = json.loads(response.text)
     except asyncio.TimeoutError as e:
-        raise PodApiClientError(
-            f"pod-api-requester did not answer within {REQUEST_TIMEOUT_S}s."
-        ) from e
+        raise PodApiClientError(f"pod-api-requester did not answer within {timeout_s}s.") from e
     except aiohttp.ClientError as e:
         raise PodApiClientError("Failed to make the request to pod-api-requester.") from e
     except json.JSONDecodeError as e:
@@ -221,13 +225,18 @@ async def pod_api_request(
         raise PodApiRequesterError("Deserialization failed for pod-api-requester response.")
 
     if response.status_code != 200:
-        err = response_obj["detail"]
+        detail = response_obj.get("detail", response_obj)
+        err = detail
         if isinstance(err, (list, tuple)):
             err = "\n".join([str(e).replace("\\n", "\n") for e in err])
         else:
             err = str(err).replace("\\n", "\n")
         logger.error(err)
-        raise PodApiRequesterError(response)
+        raise PodApiRequesterError(
+            f"pod-api-requester returned HTTP {response.status_code}: {err}",
+            status_code=response.status_code,
+            detail=detail,
+        )
 
     try:
         targ_pod_response = response_obj["response"]

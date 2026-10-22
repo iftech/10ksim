@@ -14,6 +14,7 @@ from src.deployments.experiments.logos_storage import (
     ExpConfig,
     LogosStorageExperiment,
     build_nodes,
+    build_requester,
     build_service,
 )
 from src.utils.yaml_utils import get_YAML
@@ -77,6 +78,24 @@ def test_image_is_required_and_network_needs_two_ordinary_nodes():
         ExpConfig()
     with pytest.raises(ValidationError, match="num_nodes"):
         config(num_nodes=1)
+    with pytest.raises(ValidationError, match="download_concurrency"):
+        config(download_concurrency=0)
+
+
+def test_requester_uses_the_storage_image_and_waits_for_its_http_api():
+    requester = build_requester("storage-test", config())
+    pod = requester.build()
+    container = pod.spec.containers[0]
+    assert container.image == "albertodst/pod-api-requester:logos-storage-v1"
+    assert container.readiness_probe.http_get.path == "/openapi.json"
+    assert container.readiness_probe.http_get.port == 8645
+    dependencies = requester.build_dependencies()["requester_base"]
+    service = dependencies["services"][0]
+    assert service.spec.selector.items() <= pod.metadata.labels.items()
+    assert service.spec.type == "NodePort"
+    assert dependencies["roles"][0].rules[0].resources == ["pods", "services"]
+    binding = dependencies["role_bindings"][0]
+    assert binding.subjects[0]["namespace"] == "storage-test"
 
 
 @pytest.mark.asyncio
@@ -150,11 +169,11 @@ async def test_dry_run_saves_all_manifests_and_runner_metadata(monkeypatch, tmp_
     monkeypatch.setattr(base_experiment, "kubectl_apply", apply)
     monkeypatch.setattr(base_experiment, "get_cleanup", cleanup)
     monkeypatch.setattr(LogosStorageExperiment, "_wait_until_clear", Mock())
-    transfer = Mock()
+    transfer = AsyncMock()
     monkeypatch.setattr(logos_storage, "run_file_transfer", transfer)
     exp = LogosStorageExperiment(
         api_client=ApiClient(),
-        config=config(verify_transfer=True),
+        config=config(verify_transfer=True, num_nodes=4),
         namespace="storage-test",
         output_folder=tmp_path,
         dry_run=True,
@@ -164,13 +183,31 @@ async def test_dry_run_saves_all_manifests_and_runner_metadata(monkeypatch, tmp_
 
     manifests = [get_YAML().load(path) for path in (tmp_path / "deployment_yamls").glob("*.yaml")]
     # Service and StatefulSet names must not overwrite each other's YAML.
-    assert len(manifests) == 4
-    assert {manifest["kind"] for manifest in manifests} == {"Service", "StatefulSet"}
-    assert apply.call_count == 4
+    assert len(manifests) == 9
+    assert {manifest["kind"] for manifest in manifests} == {
+        "Service",
+        "StatefulSet",
+        "Pod",
+        "ConfigMap",
+        "Role",
+        "RoleBinding",
+    }
+    requester = next(manifest for manifest in manifests if manifest["kind"] == "Pod")
+    assert requester["spec"]["containers"][0]["image"] == (
+        "albertodst/pod-api-requester:logos-storage-v1"
+    )
+    config_map = next(manifest for manifest in manifests if manifest["kind"] == "ConfigMap")
+    assert get_YAML().load(config_map["data"]["config.yaml"]) == {
+        "targets": [],
+        "endpoints": [],
+        "requests": [],
+        "actions": [],
+    }
+    assert apply.call_count == 9
     assert all(call.kwargs["dry_run"] for call in apply.call_args_list)
     cleanup.assert_not_called()
     transfer.assert_not_called()
-    assert exp.metadata["stack"]["nodes_per_statefulset"] == [1, 2]
+    assert exp.metadata["stack"]["nodes_per_statefulset"] == [1, 4]
     assert (tmp_path / "metadata.json").exists()
 
 
@@ -185,7 +222,7 @@ async def test_transfer_result_and_logs_survive_cleanup_and_failure(monkeypatch,
     }
     if not passed:
         report["error"] = "Downloaded SHA-256 does not match the uploaded file"
-    transfer = Mock(return_value=report)
+    transfer = AsyncMock(return_value=report)
     monkeypatch.setattr(logos_storage, "run_file_transfer", transfer)
     monkeypatch.setattr(base_experiment, "kubectl_apply", Mock())
     monkeypatch.setattr(base_experiment, "wait_for_rollout", AsyncMock())
@@ -202,7 +239,7 @@ async def test_transfer_result_and_logs_survive_cleanup_and_failure(monkeypatch,
     monkeypatch.setattr(logos_storage, "capture_pod_logs", capture)
     exp = LogosStorageExperiment(
         api_client=ApiClient(),
-        config=config(verify_transfer=True, duration=0),
+        config=config(verify_transfer=True, duration=0, num_nodes=4),
         namespace="storage-test",
         output_folder=tmp_path,
     )
@@ -213,13 +250,14 @@ async def test_transfer_result_and_logs_survive_cleanup_and_failure(monkeypatch,
         with pytest.raises(ExperimentFailed, match="SHA-256"):
             await exp.run()
 
-    transfer.assert_called_once_with(
+    transfer.assert_awaited_once_with(
         namespace="storage-test",
         source_pod="storage-nodes-0",
-        target_pod="storage-nodes-1",
+        target_pods=["storage-nodes-1", "storage-nodes-2", "storage-nodes-3"],
         file_size_bytes=1048576,
         timeout=60,
         api_port=8080,
+        concurrency=3,
     )
-    assert steps == ["logs", "cleanup", "cleanup", "cleanup", "cleanup"]
+    assert steps == ["logs"] + ["cleanup"] * 9
     assert (tmp_path / "metadata.json").exists()

@@ -27,9 +27,14 @@ from kubernetes.client import (
 from pydantic import BaseModel, ConfigDict, Field, NonNegativeInt, PositiveInt
 
 from src.deployments.core.configs.container import Image
+from src.deployments.core.configs.helpers.utils import find_container_config
 from src.deployments.core.pod_logs import capture_pod_logs
 from src.deployments.experiments.base_experiment import BaseExperiment
 from src.deployments.logos_storage.transfer import run_file_transfer
+from src.deployments.pod_api_requester.builder import (
+    DEFAULT_REQUESTER_APP,
+    PodApiRequesterBuilder,
+)
 from src.deployments.registry import experiment
 
 APP = "logos-storage"
@@ -46,6 +51,10 @@ class ExpConfig(BaseModel):
 
     image: Image
     """Image with the upstream Docker entrypoint and the current Storage CLI."""
+    requester_image: Image = Field(
+        default_factory=lambda: Image(repo="albertodst/pod-api-requester", tag="logos-storage-v1")
+    )
+    """Requester image providing /storage/upload and /storage/download."""
     num_nodes: int = Field(default=2, ge=2)
     """Ordinary storage nodes, in addition to one bootstrap node."""
     duration: NonNegativeInt = 120
@@ -55,11 +64,30 @@ class ExpConfig(BaseModel):
     log_level: str = "INFO"
     capture_pod_logs: bool = True
     verify_transfer: bool = False
-    """Upload fresh content to node 0 and verify its download through node 1."""
+    """Upload fresh content to node 0 and verify downloads through every other ordinary node."""
+    download_concurrency: PositiveInt = 3
+    """Maximum simultaneous receiver checks, each with its own transfer timeout."""
     file_size_bytes: PositiveInt = 1048576
     """Random payload size for the transfer check (default: 1 MiB)."""
     transfer_timeout: PositiveInt = 60
-    """Seconds allowed for upload, and for download including discovery retries."""
+    """Seconds allowed for upload, and for each active receiver including discovery retries."""
+
+
+def build_requester(namespace: str, config: ExpConfig) -> PodApiRequesterBuilder:
+    requester = (
+        PodApiRequesterBuilder()
+        .with_namespace(namespace)
+        .with_mode("server")
+        .with_image(config.requester_image)
+    )
+    container = find_container_config(requester.config, requester._container_name)
+    container.readiness_probe = V1Probe(
+        http_get=V1HTTPGetAction(path="/openapi.json", port=8645),
+        period_seconds=2,
+        timeout_seconds=2,
+        failure_threshold=3,
+    )
+    return requester
 
 
 def build_service(namespace: str, *, bootstrap: bool = False) -> V1Service:
@@ -163,14 +191,14 @@ class LogosStorageExperiment(BaseExperiment[ExpConfig]):
 
     async def _check_transfer(self):
         self.log_event("file_transfer_start")
-        report = await asyncio.to_thread(
-            run_file_transfer,
+        report = await run_file_transfer(
             namespace=self.namespace,
             source_pod=f"{NODES}-0",
-            target_pod=f"{NODES}-1",
+            target_pods=[f"{NODES}-{index}" for index in range(1, self.config.num_nodes)],
             file_size_bytes=self.config.file_size_bytes,
             timeout=self.config.transfer_timeout,
             api_port=API_PORT,
+            concurrency=self.config.download_concurrency,
         )
         if self.output_folder is not None:
             (self.output_folder / "file_transfer.json").write_text(
@@ -193,6 +221,18 @@ class LogosStorageExperiment(BaseExperiment[ExpConfig]):
                     timeout=self.config.startup_timeout,
                 )
 
+            if self.config.verify_transfer:
+                requester = build_requester(self.namespace, self.config)
+                dependencies = requester.build_dependencies()
+                config_map = dependencies["requester_base"]["config_maps"][0]
+                config_map.data["config.yaml"] = (
+                    "targets: []\nendpoints: []\nrequests: []\nactions: []\n"
+                )
+                await self.deploy(dependencies, wait_for_ready=False)
+                await self.deploy(
+                    requester.build(), wait_for_ready=True, timeout=self.config.startup_timeout
+                )
+
             if self.dry_run:
                 return
 
@@ -208,6 +248,10 @@ class LogosStorageExperiment(BaseExperiment[ExpConfig]):
                     self.namespace,
                     self.output_folder / "kubectl_logs",
                     self.api_client,
-                    label_selector=f"app={APP}",
+                    label_selector=(
+                        f"app in ({APP},{DEFAULT_REQUESTER_APP})"
+                        if self.config.verify_transfer
+                        else f"app={APP}"
+                    ),
                 )
                 self.log_event({"event": "log_capture_finished", "pods": captured})
