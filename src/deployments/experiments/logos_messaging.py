@@ -53,7 +53,9 @@ class ExpConfig(BaseModel):
         )
     )
     requester_image: Image = Field(
-        default_factory=lambda: Image.from_str("radiken/pod-api-requester:messaging-1bf91c5")
+        default_factory=lambda: Image.from_str(
+            "radiken/pod-api-requester@sha256:eb89ef86b3cb7608a8d869bc1c5a0962bf2737bd0f9b41162c5f049fb281e5d0"
+        )
     )
 
 
