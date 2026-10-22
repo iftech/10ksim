@@ -9,6 +9,7 @@ from src.deployments.pod_api_requester import pod_api_requester
 from src.deployments.pod_api_requester.pod_api_requester import (
     REQUEST_TIMEOUT_S,
     PodApiClientError,
+    PodApiRequesterError,
     PodResponse,
     post_async,
 )
@@ -89,6 +90,53 @@ async def test_a_known_requester_is_not_looked_up_again(mocker):
 
     lookup.assert_not_called()
     assert post.call_args.args[0] == "http://10.0.0.1:30000/process"
+
+
+@pytest.mark.asyncio
+async def test_an_operation_can_override_the_default_http_timeout(mocker):
+    post = mocker.patch.object(
+        pod_api_requester,
+        "post_async",
+        return_value=PodResponse(
+            status_code=200,
+            reason="OK",
+            text='{"response": {"status_code": 200, "text": "ok"}}',
+        ),
+    )
+    await pod_api_requester.pod_api_request(
+        namespace="ns",
+        service_name="svc",
+        app="app",
+        url_template="http://{target_ip}:{node_port}/storage/upload",
+        data={},
+        requester=("10.0.0.1", 30000),
+        timeout_s=65,
+    )
+    assert post.call_args.kwargs["timeout_s"] == 65
+
+
+@pytest.mark.asyncio
+async def test_requester_error_preserves_status_and_node_details(mocker):
+    mocker.patch.object(
+        pod_api_requester,
+        "post_async",
+        return_value=PodResponse(
+            status_code=502,
+            reason="Bad Gateway",
+            text='{"detail": {"upstream_status_code": 404, "body": "CID not found"}}',
+        ),
+    )
+    with pytest.raises(PodApiRequesterError) as error:
+        await pod_api_requester.pod_api_request(
+            namespace="ns",
+            service_name="svc",
+            app="app",
+            url_template="http://{target_ip}:{node_port}/storage/download",
+            data={},
+            requester=("10.0.0.1", 30000),
+        )
+    assert error.value.status_code == 502
+    assert error.value.detail["upstream_status_code"] == 404
 
 
 @pytest.mark.asyncio
