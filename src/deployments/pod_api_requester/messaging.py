@@ -1,10 +1,10 @@
 # Python Imports
 import json
 import re
-from typing import Literal, Tuple
+from typing import Tuple
 
 # Project Imports
-from src.deployments.pod_api_requester.configs import Endpoint, Target
+from src.deployments.pod_api_requester.configs import Target
 from src.deployments.pod_api_requester.pod_api_requester import (
     PodApiHttpError,
     PodApiRequesterError,
@@ -20,26 +20,18 @@ def pod_target(pod: str, port: int = REST_PORT) -> Target:
     return Target(name=pod, name_template=f"^{re.escape(pod)}$", port=port)
 
 
-async def node_call(
-    requester: Tuple[str, int],
-    pod: str,
-    route: str,
-    method: Literal["GET", "POST"] = "GET",
-    body: dict | None = None,
-    port: int = REST_PORT,
+async def messaging_send(
+    requester: Tuple[str, int], pod: str, content_topic: str, msg_size_kbytes: int
 ) -> Tuple[int, str]:
-    """Call `route` on `pod` through the requester. Returns the node's status code and body."""
-    endpoint = Endpoint(
-        name=route,
-        headers={"Content-Type": "application/json"},
-        params=body or {},
-        url=f"http://{{node}}:{{port}}{route}",
-        type=method,
-        paged=False,
-    )
-    data = {"target": wrap_arg(pod_target(pod, port)), "endpoint": wrap_arg(endpoint)}
+    """Send a random message from `pod` through the requester. Returns the node's status and body."""
+    data = {
+        "target": wrap_arg(pod_target(pod)),
+        "content_topic": content_topic,
+        "port": REST_PORT,
+        "msg_size_kbytes": msg_size_kbytes,
+    }
     requester_ip, requester_port = requester
-    response = await post_async(f"http://{requester_ip}:{requester_port}/process", data)
+    response = await post_async(f"http://{requester_ip}:{requester_port}/messaging/send", data)
     if response.status_code != 200:
         raise PodApiRequesterError(response)
     result = json.loads(response.text)

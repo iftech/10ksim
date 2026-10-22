@@ -1,34 +1,25 @@
 # Python Imports
 import asyncio
-import base64
 import json
 import logging
-import os
 import random
-import time
-from collections import defaultdict
 from datetime import timedelta
-from pathlib import Path
-from typing import Dict, List, Literal, Optional, Set, Tuple
+from typing import List, Literal
 
 import aiohttp
 from kubernetes.client import V1ExecAction, V1Probe
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    NonNegativeFloat,
-    NonNegativeInt,
-    PositiveFloat,
-    PositiveInt,
-)
+from pydantic import BaseModel, ConfigDict, Field, NonNegativeFloat, NonNegativeInt, PositiveInt
 
 # Project Imports
 from src.deployments.core.configs.container import Image
 from src.deployments.core.event_window_bridge import EventBound, EventWindow
 from src.deployments.experiments.base_experiment import BaseExperiment, V1Deployable
 from src.deployments.pod_api_requester.builder import PodApiRequesterBuilder
-from src.deployments.pod_api_requester.messaging import REST_PORT, clear_requester_cache, node_call
+from src.deployments.pod_api_requester.messaging import (
+    REST_PORT,
+    clear_requester_cache,
+    messaging_send,
+)
 from src.deployments.pod_api_requester.pod_api_requester import PodApiError, requester_address
 from src.deployments.registry import experiment
 from src.deployments.waku.bridge import Bridge
@@ -42,10 +33,6 @@ LogLevel = Literal["INFO", "DEBUG", "TRACE"]
 LOGOS_DELIVERY_BINARY = "/usr/bin/logosdeliverynode"
 CMD_TYPE = 2
 """Cluster 0, one shard. The Messaging API needs autosharding; cluster ids 1 and 2 load presets."""
-API_DIR = "api"
-NODE_METRICS_DIR = "node_metrics"
-TERMINAL_SEND_EVENTS = {"propagated", "sent", "error"}
-METRICS_PORT = 8008
 REQUEST_ERRORS = (PodApiError, asyncio.TimeoutError, aiohttp.ClientError, json.JSONDecodeError)
 
 
@@ -57,15 +44,16 @@ class ExpConfig(BaseModel):
     num_messages: NonNegativeInt = 20
     msg_size_kbytes: PositiveInt = 1
     delay_after_publish: NonNegativeFloat = 1
-    poll_interval: PositiveFloat = 1
     post_publish_dwell: NonNegativeFloat = 60
     content_topic: str = "/dst/1/messaging/proto"
-    cache_capacity: PositiveInt = 1000
     log_level: LogLevel = "INFO"
     image: Image = Field(
         default_factory=lambda: Image.from_str(
             "radiken/nwaku-pr@sha256:ecf351ff02e1770cd7d5a0a9717d08b867983d8086f442f46fb3247da6269918"
         )
+    )
+    requester_image: Image = Field(
+        default_factory=lambda: Image.from_str("radiken/pod-api-requester:messaging-1bf91c5")
     )
 
 
@@ -82,7 +70,7 @@ class MessagingBridge(Bridge):
             EventWindow(
                 key="messages",
                 start=EventBound("start_messages", timedelta(seconds=-10)),
-                end=EventBound("polling_finished", timedelta(seconds=10)),
+                end=EventBound("dwell_finished", timedelta(seconds=10)),
             ),
         ]
 
@@ -107,7 +95,6 @@ def build_relays(namespace: str, config: ExpConfig) -> V1Deployable:
         "--log-level": config.log_level,
         "--entry-layer": "messaging",
         "--reliability": "false",
-        "--rest-messaging-cache-capacity": config.cache_capacity,
     }
     builder = (
         WakuStatefulSetBuilder()
@@ -151,170 +138,39 @@ def messaging_readiness_probe(content_topic: str) -> V1Probe:
     )
 
 
-def make_payload(msg_id: str, size_bytes: int) -> str:
-    head = f"{msg_id}|".encode()
-    return base64.b64encode(head + os.urandom(max(0, size_bytes - len(head)))).decode()
-
-
-def payload_msg_id(payload: str) -> Optional[str]:
-    try:
-        head, sep, _ = base64.b64decode(payload).partition(b"|")
-    except ValueError:
-        return None
-    return head.decode(errors="replace") if sep else None
-
-
-def send_event_targets(pending: Dict[str, Set[str]], unacknowledged: Set[str]) -> List[str]:
-    """Nodes with an open request, or with a send whose reply never came back."""
-    return sorted({pod for pod, request_ids in pending.items() if request_ids} | unacknowledged)
-
-
-class ApiRecorder:
-    """Appends API records as JSON lines, one file per kind."""
-
-    def __init__(self, folder: Path):
-        self.folder = folder
-        self.folder.mkdir(parents=True, exist_ok=True)
-
-    def write(self, kind: str, record: dict) -> None:
-        with open(self.folder / f"{kind}.jsonl", "a") as out:
-            out.write(json.dumps(record) + "\n")
-
-
 @experiment(name="logos-messaging")
 class LogosMessagingExperiment(BaseExperiment[ExpConfig]):
-    """Relay nodes on the Messaging API: send, then read sends and receipts back over REST."""
+    """Relay nodes on the Messaging API, sent to over REST and measured from their logs."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    _recorder: Optional[ApiRecorder] = None
-    _pending: Dict[str, Set[str]] = {}
-    _finished: Set[str] = set()
-    _unacknowledged: Set[str] = set()
 
     def _get_metadata(self) -> dict:
         return MessagingBridge().get_metadata(self.events_log_path)
 
-    async def _send(self, requester: Tuple[str, int], index: int, pod: str) -> None:
-        msg_id = f"{index:05d}"
-        body = {
-            "payload": make_payload(msg_id, self.config.msg_size_kbytes * 1000),
-            "contentTopic": self.config.content_topic,
-        }
-        record = {"msg_id": msg_id, "node": pod, "post_ns": time.time_ns()}
+    async def _send(self, requester, index: int, pod: str) -> None:
+        event = {"event": "send", "index": index, "node": pod}
         try:
-            status, text = await node_call(
-                requester, pod, "/messaging/v1/messages", method="POST", body=body
+            status, text = await messaging_send(
+                requester, pod, self.config.content_topic, self.config.msg_size_kbytes
             )
-            record["status"] = status
+            event["status"] = status
             if status == 200:
-                record["requestId"] = json.loads(text)["requestId"]
-                if record["requestId"] not in self._finished:
-                    self._pending[pod].add(record["requestId"])
+                event["requestId"] = json.loads(text)["requestId"]
             else:
-                record["error"] = text
+                event["error"] = text
         except (*REQUEST_ERRORS, KeyError) as e:
-            record["status"] = None
-            record["error"] = str(e)
-        if "requestId" not in record:
-            self._unacknowledged.add(pod)
-        record["done_ns"] = time.time_ns()
-        self._recorder.write("sends", record)
-
-    async def _read(self, requester: Tuple[str, int], pod: str, route: str) -> Optional[list]:
-        try:
-            status, text = await node_call(requester, pod, route)
-            if status == 200:
-                return json.loads(text)
-            error = f"HTTP {status}: {text}"
-        except REQUEST_ERRORS as e:
-            error = str(e)
-        self._recorder.write(
-            "poll_errors", {"node": pod, "route": route, "poll_ns": time.time_ns(), "error": error}
-        )
-        return None
-
-    async def _poll_received(self, requester: Tuple[str, int], pod: str) -> None:
-        records = await self._read(requester, pod, "/messaging/v1/events/received")
-        poll_ns = time.time_ns()
-        for record in records or []:
-            message = record.get("message", {})
-            self._recorder.write(
-                "received",
-                {
-                    "node": pod,
-                    "poll_ns": poll_ns,
-                    "seq": record.get("seq"),
-                    "messageHash": record.get("messageHash"),
-                    "source": record.get("source"),
-                    "contentTopic": message.get("contentTopic"),
-                    "timestamp": message.get("timestamp"),
-                    "msg_id": payload_msg_id(message.get("payload", "")),
-                },
-            )
-
-    async def _poll_send_events(self, requester: Tuple[str, int], pod: str) -> None:
-        statuses = await self._read(requester, pod, "/messaging/v1/events/send")
-        poll_ns = time.time_ns()
-        for status in statuses or []:
-            request_id = status.get("requestId")
-            for event in status.get("events", []):
-                self._recorder.write(
-                    "send_events",
-                    {
-                        "node": pod,
-                        "poll_ns": poll_ns,
-                        "requestId": request_id,
-                        "kind": event.get("kind"),
-                        "messageHash": event.get("messageHash"),
-                        "timestamp": event.get("timestamp"),
-                        "error": event.get("error"),
-                    },
-                )
-                if event.get("kind") in TERMINAL_SEND_EVENTS:
-                    self._finished.add(request_id)
-                    self._pending[pod].discard(request_id)
-
-    async def _poll_loop(
-        self, requester: Tuple[str, int], pods: List[str], stop: asyncio.Event
-    ) -> None:
-        """Polls every pod each interval, plus one round after `stop` is set."""
-        while True:
-            started = time.monotonic()
-            await asyncio.gather(*(self._poll_received(requester, pod) for pod in pods))
-            senders = send_event_targets(self._pending, self._unacknowledged)
-            await asyncio.gather(*(self._poll_send_events(requester, pod) for pod in senders))
-            if stop.is_set():
-                return
-            elapsed = time.monotonic() - started
-            await asyncio.sleep(max(0.0, self.config.poll_interval - elapsed))
-
-    async def _dump_metrics(
-        self, requester: Tuple[str, int], pods: List[str], attempts: int = 3
-    ) -> None:
-        """Read before cleanup removes the pods."""
-        metrics_dir = Path(self.output_folder) / NODE_METRICS_DIR
-        metrics_dir.mkdir(parents=True, exist_ok=True)
-        for pod in pods:
-            for attempt in range(1, attempts + 1):
-                try:
-                    status, text = await node_call(requester, pod, "/metrics", port=METRICS_PORT)
-                except REQUEST_ERRORS as e:
-                    status, text = None, str(e)
-                if status == 200:
-                    (metrics_dir / f"{pod}.txt").write_text(text)
-                    break
-                logger.warning(f"Metrics of `{pod}` failed ({attempt}/{attempts}): {text[:200]}")
+            event["status"] = None
+            event["error"] = str(e)
+        self.log_event(event)
 
     async def _run(self):
         self.log_event("run_start")
-        self._recorder = ApiRecorder(Path(self.output_folder) / API_DIR)
-        self._pending = defaultdict(set)
-        self._finished = set()
-        self._unacknowledged = set()
 
         requester_builder = (
-            PodApiRequesterBuilder().with_namespace(self.namespace).with_mode("server")
+            PodApiRequesterBuilder()
+            .with_namespace(self.namespace)
+            .with_mode("server")
+            .with_image(self.config.requester_image)
         )
         await self.deploy(deployment=requester_builder.build_dependencies(), exist_ok=True)
         await self.deploy(deployment=requester_builder.build(), wait_for_ready=True)
@@ -330,9 +186,6 @@ class LogosMessagingExperiment(BaseExperiment[ExpConfig]):
         requester = requester_address(self.namespace)
         await clear_requester_cache(requester)
 
-        stop = asyncio.Event()
-        poller = asyncio.create_task(self._poll_loop(requester, pods, stop))
-
         self.log_event("start_messages")
         sends = []
         for index in range(self.config.num_messages):
@@ -342,9 +195,5 @@ class LogosMessagingExperiment(BaseExperiment[ExpConfig]):
         self.log_event("publisher_messages_finished")
 
         await asyncio.sleep(self.config.post_publish_dwell)
-        stop.set()
-        await poller
-        self.log_event("polling_finished")
-
-        await self._dump_metrics(requester, pods)
+        self.log_event("dwell_finished")
         self.log_event("internal_run_finished")
