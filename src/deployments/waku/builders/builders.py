@@ -16,6 +16,7 @@ from src.deployments.waku.builders.enr_or_addr import Enr
 from src.deployments.waku.builders.helpers import (
     WAKU_COMMAND_STR,
     WAKU_CONTAINER_NAME,
+    find_waku_command,
     find_waku_container_config,
 )
 from src.deployments.waku.builders.nodes import Nodes
@@ -99,6 +100,12 @@ class WakuStatefulSetBuilder(StatefulSetBuilder):
             service_names=service_names,
             init_container_image=init_container_image,
         )
+        return self
+
+    def with_binary(self, path: str) -> Self:
+        """Call last: `with_args` finds the command by `WAKU_COMMAND_STR`."""
+        container = find_waku_container_config(self.config)
+        find_waku_command(container.command_config).command = path
         return self
 
     def with_image(self, image: Image) -> Self:
