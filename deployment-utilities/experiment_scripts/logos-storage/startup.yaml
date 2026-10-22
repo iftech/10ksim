@@ -1,0 +1,12 @@
+experiment: logos-storage
+image:
+  repo: "albertodst/logos-storage"
+  tag: "k8s-smoke-9ce0b408"
+num_nodes: 2
+duration: 120
+startup_timeout: 300
+log_level: INFO
+capture_pod_logs: true
+verify_transfer: true
+file_size_bytes: 1048576
+transfer_timeout: 60
