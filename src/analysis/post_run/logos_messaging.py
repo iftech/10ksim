@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
@@ -87,44 +87,29 @@ def load_sends(events_log: Path) -> List[dict]:
 
 
 def send_outcomes(sends: List[dict], send_lines: List[SendLine]) -> dict:
-    """Each send matched to the node log line for its `requestId`.
+    """Sends matched to their node log line by `requestId`.
 
-    A send without a reply counts as `reply_lost` when its node logged an outcome for a
-    `requestId` the experiment never received.
+    A send without a reply has no `requestId` to match, so those are counted per node next to
+    the outcome lines whose `requestId` the experiment never received.
     """
-    by_request = {request_id: (outcome, h) for _, outcome, request_id, h, _ in send_lines}
     known = {s["requestId"] for s in sends if s.get("requestId")}
-    unclaimed: Dict[str, List[str]] = defaultdict(list)
-    for node, _, request_id, _, _ in send_lines:
-        if request_id not in known:
-            unclaimed[node].append(request_id)
-
+    outcome_of = {request_id: outcome for _, outcome, request_id, _, _ in send_lines}
     counts = {"propagated": 0, "failed": 0, "no_log_line": 0}
-    reply_lost, http_failures = [], []
-    messages: Dict[str, str] = {}
-    for send in sends:
-        request_id = send.get("requestId")
-        if request_id is None and unclaimed[send["node"]]:
-            request_id = unclaimed[send["node"]].pop(0)
-            reply_lost.append(send["index"])
-        if request_id is None:
-            http_failures.append(
-                {"index": send["index"], "status": send.get("status"), "error": send.get("error")}
-            )
-            continue
-        if request_id not in by_request:
-            counts["no_log_line"] += 1
-            continue
-        outcome, msg_hash = by_request[request_id]
-        counts[outcome] += 1
-        if outcome == "propagated":
-            messages[msg_hash] = send["node"]
+    for request_id in known:
+        counts[outcome_of.get(request_id, "no_log_line")] += 1
+    without_reply = Counter(s["node"] for s in sends if not s.get("requestId"))
+    unmatched = Counter(node for node, _, request_id, _, _ in send_lines if request_id not in known)
+    messages = {
+        msg_hash: node
+        for node, outcome, request_id, msg_hash, _ in send_lines
+        if outcome == "propagated" and (request_id in known or node in without_reply)
+    }
     return {
         "sent": len(sends),
         "accepted": len(known),
-        "reply_lost": reply_lost,
-        "http_failures": http_failures,
         **counts,
+        "without_reply": dict(sorted(without_reply.items())),
+        "unmatched_lines": dict(sorted(unmatched.items())),
         "messages": messages,
     }
 
@@ -227,6 +212,16 @@ def settings_reliability(line: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def relay_statefulsets(metadata: dict) -> List[Tuple[str, int]]:
+    """Statefulsets of the messaging nodes and their sizes. The bootstrap only does discovery."""
+    stack = metadata["stack"]
+    return [
+        (name, count)
+        for name, count in zip(stack["stateful_sets"], stack["nodes_per_statefulset"])
+        if "bootstrap" not in name
+    ]
+
+
 def _query_relay_lines(
     experiment: "LogosMessagingExperiment", text: str, window: str
 ) -> List[Tuple[str, str]]:
@@ -237,19 +232,22 @@ def _query_relay_lines(
         "start_time": bounds["start"],
         "end_time": bounds["end"],
     }
-    config = (
-        VictoriaQueryBuilder()
-        .with_url(VICTORIA_LOGS_URL)
-        .with_filters(kwargs)
-        .with_stateful_set("relay-0", None)
-        .with_query(f'"{text}"')
-        .build_query_config()
-    )
-    lines = VictoriaReader(None, config).multiline_query_info()
-    if lines.is_err():
-        raise RuntimeError(f"Query for `{text}` failed: {lines.err_value}")
-    entries = (json.loads(raw) for raw in lines.ok_value)
-    return [(e.get("kubernetes.pod_name"), e.get("_msg", "")) for e in entries]
+    found = []
+    for name, _ in relay_statefulsets(experiment.metadata):
+        config = (
+            VictoriaQueryBuilder()
+            .with_url(VICTORIA_LOGS_URL)
+            .with_filters(kwargs)
+            .with_stateful_set(name, None)
+            .with_query(f'"{text}"')
+            .build_query_config()
+        )
+        lines = VictoriaReader(None, config).multiline_query_info()
+        if lines.is_err():
+            raise RuntimeError(f"Query for `{text}` failed: {lines.err_value}")
+        entries = (json.loads(raw) for raw in lines.ok_value)
+        found.extend((e.get("kubernetes.pod_name"), e.get("_msg", "")) for e in entries)
+    return found
 
 
 def query_settings(experiment: "LogosMessagingExperiment") -> List[dict]:
@@ -318,18 +316,14 @@ def _pull_relay_lines(experiment: "LogosMessagingExperiment", dump_dir: Path) ->
             "namespace": experiment.namespace or stack.get("namespace"),
         }
     )
-    relays = [
-        (name, count)
-        for name, count in zip(stack["stateful_sets"], stack["nodes_per_statefulset"])
-        if name.startswith("relay")
-    ]
+    relays = relay_statefulsets(experiment.metadata)
     # Its check counts each sender as missing its own messages; `relay_cross_check` does not.
     WakuAnalyzer(dump_analysis_dir=str(dump_dir)).with_data_puller(
         DataPuller().with_kwargs(stack)
     ).with_reliability_check(
         stateful_sets=[name for name, _ in relays],
         nodes_per_ss=[count for _, count in relays],
-        expected_num_peers=experiment.config.num_relay_nodes,
+        expected_num_peers=sum(count for _, count in relays),
         expected_num_messages=experiment.config.num_messages,
     ).run()
     csv_path = dump_dir / RECEIVED_CSV
@@ -371,7 +365,8 @@ def report(summary: dict) -> None:
     lines = [
         f"Sends: {s['accepted']}/{s['sent']} accepted, {s['propagated']} propagated, "
         f"{s['failed']} failed, {s['no_log_line']} without a log line, "
-        f"{len(s['reply_lost'])} with the reply lost, {len(s['http_failures'])} HTTP failures",
+        f"without a reply by node {s['without_reply']}, "
+        f"unmatched outcome lines by node {s['unmatched_lines']}",
         f"Delivery: {d['observed']}/{d['expected']} (residual {d['residual']}), "
         f"{d['messages_complete']} messages at all {d['expected_per_message']} other nodes, "
         f"self receipts {d['self_receipts']}",
@@ -408,7 +403,11 @@ def run_logos_messaging_analysis(experiment: "LogosMessagingExperiment") -> dict
     dump_dir = Path(experiment.output_folder) / "analysis_data"
     csv_path = _safe("Relay line pull", lambda: _pull_relay_lines(experiment, dump_dir), None)
     summary = summarize(
-        nodes=[f"relay-0-{index}" for index in range(experiment.config.num_relay_nodes)],
+        nodes=[
+            f"{name}-{index}"
+            for name, count in relay_statefulsets(experiment.metadata)
+            for index in range(count)
+        ],
         sends=load_sends(Path(experiment.events_log_path)),
         send_lines=_safe("Send line query", lambda: query_send_lines(experiment), []),
         received_lines=_safe(

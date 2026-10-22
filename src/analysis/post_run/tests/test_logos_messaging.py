@@ -43,7 +43,7 @@ def test_parse_send_lines():
     assert parse_send_line(failed)[:3] == ("failed", "77aa", "0x9b01")
 
 
-def test_send_outcomes_match_request_ids_and_lost_replies():
+def test_send_outcomes_count_sends_without_a_reply_per_node():
     sends = [
         send(0, "relay-0-0", "r1"),
         send(1, "relay-0-1", "r2"),
@@ -55,16 +55,17 @@ def test_send_outcomes_match_request_ids_and_lost_replies():
         ("relay-0-0", "propagated", "r1", "0xa", 10),
         ("relay-0-1", "failed", "r2", "0xb", 10),
         ("relay-0-2", "propagated", "r9", "0xd", 10),
+        ("relay-0-1", "propagated", "r8", "0xe", 10),
     ]
 
     result = send_outcomes(sends, lines)
 
     assert result["accepted"] == 3
-    assert result["propagated"] == 2
+    assert result["propagated"] == 1
     assert result["failed"] == 1
     assert result["no_log_line"] == 1
-    assert result["reply_lost"] == [3]
-    assert [f["index"] for f in result["http_failures"]] == [4]
+    assert result["without_reply"] == {"relay-0-0": 1, "relay-0-2": 1}
+    assert result["unmatched_lines"] == {"relay-0-1": 1, "relay-0-2": 1}
     assert result["messages"] == {"0xa": "relay-0-0", "0xd": "relay-0-2"}
 
 
