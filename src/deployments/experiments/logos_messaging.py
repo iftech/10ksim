@@ -34,6 +34,8 @@ LOGOS_DELIVERY_BINARY = "/usr/bin/logosdeliverynode"
 CMD_TYPE = 2
 """Cluster 0, one shard. The Messaging API needs autosharding; cluster ids 1 and 2 load presets."""
 REQUEST_ERRORS = (PodApiError, asyncio.TimeoutError, aiohttp.ClientError, json.JSONDecodeError)
+SCRAPE_RATE_INTERVAL = timedelta(seconds=121)
+"""`Nimlibp2pScrapeBuilder.rate_interval`, the lookback of every scraped rate."""
 
 
 class ExpConfig(BaseModel):
@@ -73,6 +75,12 @@ class MessagingBridge(Bridge):
                 key="messages",
                 start=EventBound("start_messages", timedelta(seconds=-10)),
                 end=EventBound("dwell_finished", timedelta(seconds=10)),
+            ),
+            # For the metrics scrape: one rate interval in, so rates cover sending only.
+            EventWindow(
+                key="stable",
+                start=EventBound("start_messages", SCRAPE_RATE_INTERVAL),
+                end=EventBound("publisher_messages_finished"),
             ),
         ]
 

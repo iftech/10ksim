@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from src.analysis.post_run.logos_messaging import (
     delivery,
     delivery_latency,
@@ -5,6 +7,7 @@ from src.analysis.post_run.logos_messaging import (
     parse_send_line,
     propagation_time,
     relay_cross_check,
+    scrape_and_plot,
     send_outcomes,
     settings_reliability,
 )
@@ -118,3 +121,24 @@ def test_settings_reliability_reads_the_startup_line():
 
     assert settings_reliability(line) == "false"
     assert settings_reliability("INF Messaging API settings topics=x") is None
+
+
+def test_scrape_runs_only_on_a_window_with_a_duration(monkeypatch):
+    calls = []
+    module = "src.analysis.post_run.logos_messaging"
+    monkeypatch.setattr(f"{module}.scrape_run_metrics", lambda *args, **kwargs: calls.append(args))
+    monkeypatch.setattr(f"{module}.plot_run_metrics", lambda *args, **kwargs: None)
+    stable = {"start": "2026-10-22T11:02:57", "end": "2026-10-22T11:01:16"}
+    experiment = SimpleNamespace(
+        metadata={"results": {"stable": stable}},
+        output_folder="out",
+        config=SimpleNamespace(num_relay_nodes=20),
+        namespace="zerotesting",
+    )
+
+    scrape_and_plot(experiment)
+    assert calls == []
+
+    stable["duration"] = "0h 8m 0s"
+    scrape_and_plot(experiment)
+    assert len(calls) == 1
