@@ -390,8 +390,9 @@ def report(summary: dict) -> None:
 
 def scrape_and_plot(experiment: "LogosMessagingExperiment") -> None:
     """Bandwidth, memory and mesh-health figures over the sending window."""
-    if not experiment.metadata.get("results", {}).get("stable"):
-        logger.warning("Run has no sending window; skipping the metrics scrape")
+    # The bridge leaves out `duration` when the window is inverted, as on runs under ~2 minutes.
+    if not experiment.metadata.get("results", {}).get("stable", {}).get("duration"):
+        logger.warning("Run has no sending window to scrape; skipping the metrics scrape")
         return
 
     out = Path(experiment.output_folder)
