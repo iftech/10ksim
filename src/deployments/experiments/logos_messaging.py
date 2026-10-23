@@ -74,6 +74,12 @@ class MessagingBridge(Bridge):
                 start=EventBound("start_messages", timedelta(seconds=-10)),
                 end=EventBound("dwell_finished", timedelta(seconds=10)),
             ),
+            # Read by the metrics scrape. Starts one rate interval in, so every rate covers sending only.
+            EventWindow(
+                key="stable",
+                start=EventBound("start_messages", timedelta(seconds=121)),
+                end=EventBound("publisher_messages_finished"),
+            ),
         ]
 
 
