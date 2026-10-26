@@ -3,17 +3,20 @@ import logging
 import random
 import time
 import traceback
-from typing import ClassVar, Literal, Optional
+from datetime import datetime
+from pathlib import Path
+from typing import ClassVar, List, Literal, Optional
 
 from kubernetes.client import V1Probe, V1ServicePort, V1StatefulSet, V1TCPSocketAction
 from pydantic import BaseModel, ConfigDict, Field, NonNegativeFloat, NonNegativeInt, model_validator
 
 from src.deployments.core.builders import ServiceBuilder
 from src.deployments.core.configs.container import Image
+from src.deployments.core.event_log import find_events
 from src.deployments.core.k8s_rollout import resolved_images
 from src.deployments.core.pod_logs import capture_pod_logs
 from src.deployments.experiments.base_experiment import BaseExperiment
-from src.deployments.libp2p.bridge import Bridge
+from src.deployments.libp2p.bridge import STABLE_END_SHIFT, STABLE_START_SHIFT, Bridge
 from src.deployments.libp2p.builders.builders import Libp2pStatefulSetBuilder
 from src.deployments.libp2p.builders.builders import Option as NimLibp2p
 from src.deployments.libp2p.builders.helpers import readiness_probe_metrics
@@ -62,6 +65,8 @@ class ExpConfig(BaseModel):
     """Per-node connection cap."""
     max_failed_publishes: NonNegativeInt = 0
     """Publishes that may fail before the run is treated as invalid."""
+    publish_rate_tolerance: NonNegativeFloat = 0.1
+    """Share the achieved rate may be off `1 / delay_after_publish` before the run is invalid."""
     capture_pod_logs: bool = True
     """Pull pod logs with the run, so the analysis does not depend on the log collector."""
     log_capture_lead: NonNegativeInt = 45
@@ -207,6 +212,25 @@ async def publish(config, namespace, random_name, requester) -> bool:
     return False
 
 
+def achieved_publish_rate(events_log: Path) -> Optional[float]:
+    """Publishes per second over the stable window, or the whole loop if the run is too short."""
+
+    def times(event: str) -> List[datetime]:
+        return [
+            datetime.strptime(e["timestamp"], "%Y-%m-%d %H:%M:%S")
+            for e in find_events(events_log, {"event": event})
+        ]
+
+    publishes = times("publish")
+    start, end = times("start_messages")[-1], times("publisher_messages_finished")[-1]
+    if start + STABLE_START_SHIFT < end + STABLE_END_SHIFT:
+        start, end = start + STABLE_START_SHIFT, end + STABLE_END_SHIFT
+    seconds = (end - start).total_seconds()
+    if not publishes or seconds <= 0:
+        return None
+    return sum(start <= t < end for t in publishes) / seconds
+
+
 @experiment(name="nimlibp2p")
 class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -310,8 +334,23 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
                 f"{failed} of {len(published)} messages were never published, so delivery "
                 f"is measured against a denominator the run did not send"
             )
+        self._check_publish_rate()
 
         self.log_event("internal_run_finished")
+
+    def _check_publish_rate(self) -> None:
+        achieved = achieved_publish_rate(self.events_log_path)
+        if achieved is None or not self.config.delay_after_publish:
+            return
+        configured = 1 / self.config.delay_after_publish
+        self.log_event(
+            {"event": "publish_rate", "configured": configured, "achieved": round(achieved, 3)}
+        )
+        if abs(achieved / configured - 1) > self.config.publish_rate_tolerance:
+            self.fail_run(
+                f"published {achieved:.2f} msg/s against {configured:.2f} configured, so its "
+                f"bandwidth does not compare with runs at the configured rate"
+            )
 
     async def _dwell_and_capture(self) -> None:
         """Wait out the post-publish dwell, capturing pod logs before the pods go away.
