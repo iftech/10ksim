@@ -14,7 +14,15 @@ ADDRESS = ("10.0.0.1", 30000)
 
 def receipts(**download_overrides):
     upload = {"cid": "zTestCid", "sha256": "a" * 64, "file_size_bytes": 1048576, "seconds": 0.2}
-    download = {**upload, "seconds": 0.4, "verified": True}
+    download = {
+        "cid": upload["cid"],
+        "sha256": upload["sha256"],
+        "file_size_bytes": upload["file_size_bytes"],
+        "seconds": 0.4,
+        "transport": "direct",
+        "verified": True,
+        "verification_location": "receiver_pod",
+    }
     return upload, {**download, **download_overrides}
 
 
@@ -49,11 +57,17 @@ async def test_transfer_uploads_to_one_node_and_downloads_through_the_other(oper
     result = await run_transfer()
 
     assert result["status"] == "passed"
+    assert result["download_mode"] == "stream"
+    assert result["verification"] == "sha256"
+    assert result["verification_location"] == "receiver_pod"
     assert result["cid"] == "zTestCid"
     assert result["download_attempts"] == 1
     assert result["upload"]["seconds"] == 0.2
     assert result["downloads"][0]["download"]["seconds"] == 0.4
     assert result["downloads"][0]["target_pod"] == "storage-nodes-1"
+    assert result["downloads"][0]["verification"] == "sha256"
+    assert result["downloads"][0]["download"]["verified"] is True
+    assert result["downloads"][0]["download"]["sha256"] == result["upload"]["sha256"]
     lookup.assert_called_once_with("storage-test")
     upload.assert_awaited_once_with(
         namespace="storage-test",
@@ -66,15 +80,23 @@ async def test_transfer_uploads_to_one_node_and_downloads_through_the_other(oper
     args = download.await_args.kwargs
     assert args["pod"] == "storage-nodes-1"
     assert args["cid"] == "zTestCid"
-    assert args["expected_sha256"] == "a" * 64
+    assert args["expected_sha256"] == result["upload"]["sha256"]
     assert args["expected_size_bytes"] == 1048576
     assert args["requester"] == ADDRESS
+    assert args["transport"] == "direct"
     assert 0 < args["timeout"] <= 60
 
 
 @pytest.mark.parametrize(
     ("overrides", "error"),
-    [({"sha256": "b" * 64}, "SHA-256"), ({"file_size_bytes": 42}, "Downloaded 42 bytes")],
+    [
+        ({"cid": "another-cid"}, "requested CID"),
+        ({"file_size_bytes": 42}, "Downloaded 42 bytes"),
+        ({"sha256": "b" * 64}, "SHA-256 does not match"),
+        ({"verified": False}, "does not confirm verification"),
+        ({"verification_location": "central_requester"}, "does not confirm verification"),
+        ({"transport": "mix"}, "does not confirm verification"),
+    ],
 )
 async def test_inconsistent_receipts_fail_without_retrying(operations, overrides, error):
     _, _, download = operations
@@ -83,7 +105,7 @@ async def test_inconsistent_receipts_fail_without_retrying(operations, overrides
 
     assert result["status"] == "failed"
     assert result["stage"] == "download"
-    assert result["downloads"][0]["stage"] == "verify"
+    assert result["downloads"][0]["stage"] == "confirm"
     assert error in result["error"]
     download.assert_awaited_once()
     assert "upload" in result and "download" in result["downloads"][0]
@@ -142,9 +164,9 @@ async def test_upload_failure_does_not_attempt_a_download(operations):
     download.assert_not_awaited()
 
 
-async def test_integrity_failure_is_not_retried(operations):
+async def test_permanent_download_failure_is_not_retried(operations):
     _, _, download = operations
-    download.side_effect = StorageRequestError("Downloaded data failed verification")
+    download.side_effect = StorageRequestError("Downloaded file SHA-256 does not match upload")
     result = await run_transfer()
     assert result["stage"] == "download"
     assert result["status"] == "failed"
@@ -166,7 +188,8 @@ async def test_download_cannot_exceed_its_overall_deadline(operations):
     download.assert_awaited_once()
 
 
-async def test_one_upload_reaches_three_receivers_with_bounded_concurrency(operations):
+@pytest.mark.parametrize("transport", ["direct", "mix"])
+async def test_one_upload_reaches_three_receivers_with_bounded_concurrency(operations, transport):
     _, upload, download = operations
     targets = [f"storage-nodes-{index}" for index in range(1, 4)]
     entered = {pod: asyncio.Event() for pod in targets}
@@ -181,12 +204,12 @@ async def test_one_upload_reaches_three_receivers_with_bounded_concurrency(opera
         entered[kwargs["pod"]].set()
         try:
             await release.wait()
-            return receipts()[1]
+            return receipts(transport=transport)[1]
         finally:
             active -= 1
 
     download.side_effect = receive
-    task = asyncio.create_task(run_transfer(target_pods=targets, concurrency=2))
+    task = asyncio.create_task(run_transfer(target_pods=targets, concurrency=2, transport=transport))
     try:
         await asyncio.wait_for(
             asyncio.gather(entered[targets[0]].wait(), entered[targets[1]].wait()), timeout=2
@@ -199,6 +222,7 @@ async def test_one_upload_reaches_three_receivers_with_bounded_concurrency(opera
 
     assert result["status"] == "passed"
     assert peak == 2
+    assert result["transport"] == transport
     assert result["download_attempts"] == 3
     assert [entry["target_pod"] for entry in result["downloads"]] == targets
     assert all(entry["status"] == "passed" for entry in result["downloads"])
@@ -206,8 +230,9 @@ async def test_one_upload_reaches_three_receivers_with_bounded_concurrency(opera
     assert download.await_count == 3
     for call in download.await_args_list:
         assert call.kwargs["cid"] == "zTestCid"
-        assert call.kwargs["expected_sha256"] == "a" * 64
+        assert call.kwargs["expected_sha256"] == result["upload"]["sha256"]
         assert call.kwargs["expected_size_bytes"] == 1048576
+        assert call.kwargs["transport"] == transport
 
 
 async def test_one_receiver_failure_preserves_the_other_results(operations):
@@ -216,7 +241,7 @@ async def test_one_receiver_failure_preserves_the_other_results(operations):
 
     async def receive(**kwargs):
         if kwargs["pod"] == "storage-nodes-2":
-            raise StorageRequestError("SHA-256 verification failed")
+            raise StorageRequestError("Invalid verifier receipt")
         await asyncio.sleep(0)
         return receipts()[1]
 
@@ -226,7 +251,7 @@ async def test_one_receiver_failure_preserves_the_other_results(operations):
     assert "1 of 3 downloads failed" in result["error"]
     assert "storage-nodes-2" in result["error"]
     assert [entry["status"] for entry in result["downloads"]] == ["passed", "failed", "passed"]
-    assert "SHA-256" in result["downloads"][1]["error"]
+    assert "Invalid verifier receipt" in result["downloads"][1]["error"]
     assert download.await_count == 3
     upload.assert_awaited_once()
     json.dumps(result)
@@ -277,6 +302,7 @@ async def test_queued_receivers_get_a_fresh_deadline(monkeypatch, operations):
         {"target_pods": ["storage-nodes-0"]},
         {"target_pods": ["storage-nodes-1", "storage-nodes-1"]},
         {"concurrency": 0},
+        {"transport": "invalid"},
     ],
 )
 async def test_invalid_receiver_settings_do_not_upload(operations, overrides):

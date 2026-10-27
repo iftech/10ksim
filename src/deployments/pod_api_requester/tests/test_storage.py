@@ -9,6 +9,15 @@ from src.deployments.pod_api_requester.pod_api_requester import PodApiRequesterE
 pytestmark = pytest.mark.asyncio
 ADDRESS = ("10.0.0.1", 30000)
 RECEIPT = {"cid": "zTestCid", "sha256": "a" * 64, "file_size_bytes": 1048576, "seconds": 0.2}
+DOWNLOAD_RECEIPT = {
+    "cid": "zTestCid",
+    "sha256": "a" * 64,
+    "file_size_bytes": 1048576,
+    "seconds": 0.4,
+    "transport": "direct",
+    "verified": True,
+    "verification_location": "receiver_pod",
+}
 
 
 @pytest.fixture
@@ -41,8 +50,8 @@ async def test_upload_targets_one_pod_and_allows_the_operation_to_finish(api_req
     assert args["requester"] == ADDRESS
 
 
-async def test_download_passes_the_upload_receipt_and_requires_verification(api_request):
-    receipt = {**RECEIPT, "verified": True}
+async def test_download_passes_expected_hash_and_verifier_port(api_request):
+    receipt = DOWNLOAD_RECEIPT
     api_request.return_value["response"]["text"] = json.dumps(receipt)
     assert (
         await storage.storage_download(
@@ -50,8 +59,8 @@ async def test_download_passes_the_upload_receipt_and_requires_verification(api_
             pod="storage-nodes-1",
             api_port=8080,
             cid=RECEIPT["cid"],
-            expected_sha256=RECEIPT["sha256"],
             expected_size_bytes=1048576,
+            expected_sha256=RECEIPT["sha256"],
             timeout=17,
             requester=ADDRESS,
         )
@@ -61,8 +70,29 @@ async def test_download_passes_the_upload_receipt_and_requires_verification(api_
     assert args["url_template"].endswith("/storage/download")
     assert args["data"]["transport"] == "direct"
     assert args["data"]["expected_sha256"] == RECEIPT["sha256"]
+    assert args["data"]["verifier_port"] == 8646
     assert args["data"]["expected_size_bytes"] == 1048576
     assert args["timeout_s"] == 22
+
+
+async def test_download_passes_mix_transport_to_the_existing_requester_endpoint(api_request):
+    api_request.return_value["response"]["text"] = json.dumps(
+        {**DOWNLOAD_RECEIPT, "transport": "mix"}
+    )
+    await storage.storage_download(
+        namespace="storage-test",
+        pod="storage-nodes-1",
+        api_port=8080,
+        cid=RECEIPT["cid"],
+        expected_size_bytes=1048576,
+        expected_sha256=RECEIPT["sha256"],
+        timeout=60,
+        requester=ADDRESS,
+        transport="mix",
+    )
+    args = api_request.await_args.kwargs
+    assert args["url_template"].endswith("/storage/download")
+    assert args["data"]["transport"] == "mix"
 
 
 @pytest.mark.parametrize(
@@ -72,10 +102,11 @@ async def test_download_passes_the_upload_receipt_and_requires_verification(api_
         (502, {"upstream_status_code": 503}, True),
         (502, "connection failed", True),
         (504, "timed out", True),
-        (409, "integrity failure", False),
+        (409, "manifest size mismatch", False),
         (404, "no matching pod or missing route", False),
         (422, "invalid input", False),
         (502, {"upstream_status_code": 400}, False),
+        (502, {"upstream_status_code": 409}, False),
     ],
 )
 async def test_only_transient_operation_errors_are_retryable(
@@ -95,15 +126,33 @@ async def test_malformed_receipts_fail_without_retrying(api_request, receipt):
     assert not error.value.retryable
 
 
-async def test_a_download_receipt_without_verification_is_rejected(api_request):
+async def test_a_receipt_without_receiver_pod_verification_is_rejected(api_request):
+    api_request.return_value["response"]["text"] = json.dumps({**RECEIPT, "verified": True})
     with pytest.raises(storage.StorageRequestError, match="invalid download receipt"):
         await storage.storage_download(
             namespace="storage-test",
             pod="storage-nodes-1",
             api_port=8080,
             cid=RECEIPT["cid"],
-            expected_sha256=RECEIPT["sha256"],
             expected_size_bytes=1048576,
+            expected_sha256=RECEIPT["sha256"],
+            timeout=60,
+            requester=ADDRESS,
+        )
+
+
+async def test_an_unverified_download_receipt_is_rejected(api_request):
+    api_request.return_value["response"]["text"] = json.dumps(
+        {**DOWNLOAD_RECEIPT, "verified": False}
+    )
+    with pytest.raises(storage.StorageRequestError, match="invalid download receipt"):
+        await storage.storage_download(
+            namespace="storage-test",
+            pod="storage-nodes-1",
+            api_port=8080,
+            cid=RECEIPT["cid"],
+            expected_size_bytes=1048576,
+            expected_sha256=RECEIPT["sha256"],
             timeout=60,
             requester=ADDRESS,
         )

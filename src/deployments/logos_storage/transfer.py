@@ -1,8 +1,9 @@
-"""Upload once and verify downloads through the other Storage nodes."""
+"""Upload once and verify streamed downloads inside the other Storage pods."""
 
 import asyncio
 import logging
 import time
+from typing import Literal
 
 from src.deployments.pod_api_requester.pod_api_requester import requester_address
 from src.deployments.pod_api_requester.storage import (
@@ -23,11 +24,12 @@ async def _download_target(
     namespace: str,
     target_pod: str,
     cid: str,
-    sha256: str,
     file_size_bytes: int,
+    expected_sha256: str,
     timeout: float,
     api_port: int,
     requester: tuple[str, int],
+    transport: Literal["direct", "mix"],
 ) -> dict:
     """Give one receiver a deadline, including retries, once its slot is available."""
     started = time.monotonic()
@@ -36,6 +38,7 @@ async def _download_target(
         "stage": "download",
         "target_pod": target_pod,
         "download_attempts": 0,
+        "verification": "pending",
     }
     try:
         deadline = time.monotonic() + timeout
@@ -53,10 +56,11 @@ async def _download_target(
                         pod=target_pod,
                         api_port=api_port,
                         cid=cid,
-                        expected_sha256=sha256,
                         expected_size_bytes=file_size_bytes,
+                        expected_sha256=expected_sha256,
                         timeout=remaining,
                         requester=requester,
+                        transport=transport,
                     )
                 break
             except TimeoutError as exc:
@@ -74,14 +78,22 @@ async def _download_target(
                 await asyncio.sleep(min(2, remaining))
 
         report["download"] = download
-        report["stage"] = "verify"
+        report["stage"] = "confirm"
+        if download["cid"] != cid:
+            raise FileTransferError("Download receipt does not match the requested CID")
         if download["file_size_bytes"] != file_size_bytes:
             raise FileTransferError(
                 f"Downloaded {download['file_size_bytes']} bytes; expected {file_size_bytes}"
             )
-        if download["sha256"] != sha256:
-            raise FileTransferError("Downloaded SHA-256 does not match the uploaded file")
-        report.update(status="passed", stage="complete")
+        if download["sha256"] != expected_sha256:
+            raise FileTransferError("Downloaded file SHA-256 does not match the upload")
+        if (
+            download["verified"] is not True
+            or download["verification_location"] != "receiver_pod"
+            or download["transport"] != transport
+        ):
+            raise FileTransferError("Download receipt does not confirm verification in the receiver pod")
+        report.update(status="passed", stage="complete", verification="sha256")
     except Exception as exc:
         report["error"] = str(exc) or type(exc).__name__
     report["elapsed_seconds"] = round(time.monotonic() - started, 6)
@@ -97,10 +109,11 @@ async def run_file_transfer(
     timeout: float,
     api_port: int,
     concurrency: int = 3,
+    transport: Literal["direct", "mix"] = "direct",
 ) -> dict:
-    """Upload once, then verify the same CID through every receiver.
+    """Upload once, then hash each receiver's network stream in a co-located verifier.
 
-    The requester generates and hashes the payload. Only receipts travel to the runner.
+    Only control and verified receipts reach the central requester and experiment runner.
     A failed receiver does not cancel the others; all results are saved in the report.
     """
     started = time.monotonic()
@@ -110,7 +123,10 @@ async def run_file_transfer(
         "source_pod": source_pod,
         "target_pods": target_pods,
         "file_size_bytes": file_size_bytes,
-        "transport": "direct",
+        "transport": transport,
+        "download_mode": "stream",
+        "verification": "sha256",
+        "verification_location": "receiver_pod",
         "download_concurrency": concurrency,
         "download_attempts": 0,
         "downloads": [],
@@ -126,6 +142,8 @@ async def run_file_transfer(
             )
         if concurrency < 1:
             raise FileTransferError("Download concurrency must be positive")
+        if transport not in {"direct", "mix"}:
+            raise FileTransferError("Download transport must be direct or mix")
         async with asyncio.timeout(timeout):
             requester = await asyncio.to_thread(requester_address, namespace)
         logger.info("Uploading %s bytes to %s", file_size_bytes, source_pod)
@@ -151,11 +169,12 @@ async def run_file_transfer(
                     namespace=namespace,
                     target_pod=pod,
                     cid=cid,
-                    sha256=upload["sha256"],
                     file_size_bytes=file_size_bytes,
+                    expected_sha256=upload["sha256"],
                     timeout=timeout,
                     api_port=api_port,
                     requester=requester,
+                    transport=transport,
                 )
 
         downloads = await asyncio.gather(*(receive(pod) for pod in target_pods))

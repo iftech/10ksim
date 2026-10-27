@@ -1,10 +1,10 @@
-"""Client operations for the requester's streaming Logos Storage API."""
+"""Client operations for uploads and verified streams consumed in receiver pods."""
 
 import json
 import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, PositiveInt, ValidationError
+from pydantic import BaseModel, Field, PositiveInt
 
 from src.deployments.pod_api_requester.configs import Target
 from src.deployments.pod_api_requester.pod_api_requester import (
@@ -17,6 +17,7 @@ from src.deployments.pod_api_requester.pod_api_requester import (
 )
 
 RESPONSE_GRACE_SECONDS = 5
+STORAGE_VERIFIER_PORT = 8646
 
 
 class StorageRequestError(RuntimeError):
@@ -32,8 +33,14 @@ class UploadReceipt(BaseModel):
     seconds: float = Field(ge=0, allow_inf_nan=False)
 
 
-class DownloadReceipt(UploadReceipt):
+class DownloadReceipt(BaseModel):
+    cid: str = Field(min_length=1)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    file_size_bytes: PositiveInt
+    seconds: float = Field(ge=0, allow_inf_nan=False)
+    transport: Literal["direct", "mix"]
     verified: Literal[True]
+    verification_location: Literal["receiver_pod"]
 
 
 def _retryable(error: PodApiRequesterError) -> bool:
@@ -78,7 +85,7 @@ async def _storage_request(
     receipt_type = UploadReceipt if operation == "upload" else DownloadReceipt
     try:
         return receipt_type.model_validate(json.loads(result["response"]["text"])).model_dump()
-    except (KeyError, TypeError, ValueError, ValidationError) as exc:
+    except (KeyError, TypeError, ValueError) as exc:
         raise StorageRequestError(f"{pod}: invalid {operation} receipt: {exc}") from exc
 
 
@@ -108,10 +115,11 @@ async def storage_download(
     pod: str,
     api_port: int,
     cid: str,
-    expected_sha256: str,
     expected_size_bytes: int,
+    expected_sha256: str,
     timeout: float,
     requester: tuple[str, int],
+    transport: Literal["direct", "mix"] = "direct",
 ) -> dict:
     return await _storage_request(
         "download",
@@ -119,9 +127,10 @@ async def storage_download(
         pod=pod,
         api_port=api_port,
         cid=cid,
-        expected_sha256=expected_sha256,
         expected_size_bytes=expected_size_bytes,
-        transport="direct",
+        expected_sha256=expected_sha256,
+        verifier_port=STORAGE_VERIFIER_PORT,
+        transport=transport,
         timeout=timeout,
         requester=requester,
     )
