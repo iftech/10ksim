@@ -209,7 +209,9 @@ async def test_one_upload_reaches_three_receivers_with_bounded_concurrency(opera
             active -= 1
 
     download.side_effect = receive
-    task = asyncio.create_task(run_transfer(target_pods=targets, concurrency=2, transport=transport))
+    task = asyncio.create_task(
+        run_transfer(target_pods=targets, concurrency=2, transport=transport)
+    )
     try:
         await asyncio.wait_for(
             asyncio.gather(entered[targets[0]].wait(), entered[targets[1]].wait()), timeout=2

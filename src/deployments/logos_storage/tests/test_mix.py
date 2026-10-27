@@ -42,15 +42,15 @@ def relay_setup(tmp_path):
     # Replace curl only; no network or cluster is used by these checks.
     curl = bin_dir / "curl"
     curl.write_text(
-        '#!/bin/bash\n'
+        "#!/bin/bash\n"
         'for url in "$@"; do :; done\n'
         'case "$url" in\n'
-        '  http://relay-[0-3]:8080/api/storage/v1/debug/info)\n'
-        '    index=${url#http://relay-}\n'
-        '    index=${index%%:*}\n'
+        "  http://relay-[0-3]:8080/api/storage/v1/debug/info)\n"
+        "    index=${url#http://relay-}\n"
+        "    index=${index%%:*}\n"
         '    cat "$MIX_TEST_INFO_DIR/$index.json" ;;\n'
-        '  *) exit 1 ;;\n'
-        'esac\n'
+        "  *) exit 1 ;;\n"
+        "esac\n"
     )
     curl.chmod(0o755)
     env = {
@@ -94,9 +94,7 @@ def test_discovery_writes_a_public_pool_and_all_proxy_sprs(relay_setup):
             for info in infos
         ],
     }
-    assert (config_dir / "proxies.txt").read_text().splitlines() == [
-        info["spr"] for info in infos
-    ]
+    assert (config_dir / "proxies.txt").read_text().splitlines() == [info["spr"] for info in infos]
     assert {path.name for path in config_dir.iterdir()} == {"pool.json", "proxies.txt"}
 
 

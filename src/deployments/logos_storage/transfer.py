@@ -92,7 +92,9 @@ async def _download_target(
             or download["verification_location"] != "receiver_pod"
             or download["transport"] != transport
         ):
-            raise FileTransferError("Download receipt does not confirm verification in the receiver pod")
+            raise FileTransferError(
+                "Download receipt does not confirm verification in the receiver pod"
+            )
         report.update(status="passed", stage="complete", verification="sha256")
     except Exception as exc:
         report["error"] = str(exc) or type(exc).__name__

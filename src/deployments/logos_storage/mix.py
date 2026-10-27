@@ -16,5 +16,7 @@ def build_mix_scripts(namespace: str) -> V1ConfigMap:
         api_version="v1",
         kind="ConfigMap",
         metadata=V1ObjectMeta(name=MIX_SCRIPTS_CONFIG_MAP, namespace=namespace),
-        data={name: (scripts / name).read_text() for name in ("prepare_mix.sh", "start_storage.sh")},
+        data={
+            name: (scripts / name).read_text() for name in ("prepare_mix.sh", "start_storage.sh")
+        },
     )

@@ -112,9 +112,7 @@ def _group_name(bootstrap: bool, mix_relay: bool) -> str:
     return MIX_RELAYS if mix_relay else NODES
 
 
-def build_service(
-    namespace: str, *, bootstrap: bool = False, mix_relay: bool = False
-) -> V1Service:
+def build_service(namespace: str, *, bootstrap: bool = False, mix_relay: bool = False) -> V1Service:
     name = _group_name(bootstrap, mix_relay)
     labels = {"app": APP, "group": name}
     return V1Service(
@@ -209,9 +207,7 @@ def build_nodes(
                 V1Volume(name="mix-config", empty_dir=V1EmptyDirVolumeSource()),
             ]
         )
-        script_mount = V1VolumeMount(
-            name="mix-scripts", mount_path=MIX_SCRIPTS_DIR, read_only=True
-        )
+        script_mount = V1VolumeMount(name="mix-scripts", mount_path=MIX_SCRIPTS_DIR, read_only=True)
         init_containers = [
             V1Container(
                 name=MIX_INIT_CONTAINER,
@@ -321,7 +317,9 @@ class LogosStorageExperiment(BaseExperiment[ExpConfig]):
                 timeout=self.config.startup_timeout,
             )
             if self.config.mix_enabled:
-                await self.deploy(build_service(self.namespace, mix_relay=True), wait_for_ready=False)
+                await self.deploy(
+                    build_service(self.namespace, mix_relay=True), wait_for_ready=False
+                )
                 await self.deploy(
                     build_nodes(self.namespace, self.config, mix_relay=True),
                     wait_for_ready=True,
