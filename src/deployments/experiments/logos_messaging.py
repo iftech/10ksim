@@ -63,12 +63,8 @@ class MessagingBridge(Bridge):
     interval: Literal["complete", "messages"] = "messages"
 
     def event_windows(self) -> List[EventWindow]:
-        return [
-            EventWindow(
-                key="complete",
-                start=EventBound("wait_for_clear_finished"),
-                end=EventBound("internal_run_finished", timedelta(seconds=30)),
-            ),
+        # The Waku bridge's `complete` and `stable` windows, plus the sending window.
+        return super().event_windows() + [
             EventWindow(
                 key="messages",
                 start=EventBound("start_messages", timedelta(seconds=-10)),

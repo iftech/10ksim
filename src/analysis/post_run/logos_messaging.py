@@ -17,6 +17,7 @@ from src.analysis.mesh_analysis.analyzers.waku.waku_analyzer import WakuAnalyzer
 from src.analysis.mesh_analysis.readers.builders.victoria_reader_builder import VictoriaQueryBuilder
 from src.analysis.mesh_analysis.readers.victoria_reader import VictoriaReader
 from src.analysis.metrics import scrape_utils
+from src.analysis.post_run.metrics import plot_run_metrics, scrape_run_metrics
 from src.deployments.core.event_window_bridge import EventNotFound
 
 if TYPE_CHECKING:
@@ -387,6 +388,19 @@ def report(summary: dict) -> None:
         logger.info(line)
 
 
+def scrape_and_plot(experiment: "LogosMessagingExperiment") -> None:
+    """Bandwidth, memory and mesh-health figures over the stable window."""
+    # The bridge leaves out `duration` when the window is inverted, as on runs under 3.5 minutes.
+    if not experiment.metadata.get("results", {}).get("stable", {}).get("duration"):
+        logger.warning("Run has no stable window; skipping the metrics scrape")
+        return
+
+    out = Path(experiment.output_folder)
+    label = f"{experiment.config.num_relay_nodes} nodes"
+    dump = scrape_run_metrics(experiment.metadata, out / "metrics", name=label)
+    plot_run_metrics({label: dump}, out / "plots", xlabel=experiment.namespace)
+
+
 def _safe(label: str, query, default):
     try:
         return query()
@@ -420,4 +434,5 @@ def run_logos_messaging_analysis(experiment: "LogosMessagingExperiment") -> dict
     dump_dir.mkdir(parents=True, exist_ok=True)
     (dump_dir / "messaging_summary.json").write_text(json.dumps(summary, indent=2))
     report(summary)
+    _safe("Metrics scrape", lambda: scrape_and_plot(experiment), None)
     return summary
