@@ -64,22 +64,27 @@ async def test_the_requester_is_looked_up_once_per_run_not_per_message(tmp_path,
 
 
 class StallingClock:
-    """Event log clock that only the run's sleeps move, each by `stall` more than asked."""
+    """Run clock that only the run's sleeps move, each by `stall` more than asked."""
 
     def __init__(self, stall: float):
-        self.time = datetime(2026, 8, 15, 8, 17, 14, tzinfo=timezone.utc)
+        # Mid-second, so a check that rounds to whole seconds is off.
+        self.time = datetime(2026, 8, 15, 8, 17, 14, 600000, tzinfo=timezone.utc)
         self.stall = stall
 
     def now(self, tz=None):
         return self.time
 
+    def monotonic(self):
+        return self.time.timestamp()
+
     async def sleep(self, seconds):
         self.time += timedelta(seconds=seconds + self.stall)
 
 
-async def run_with_stall(tmp_path, mocker, *, stall: float, messages: int) -> list:
+async def run_with_stall(tmp_path, mocker, *, stall: float, messages: int, delay: float) -> list:
     clock = StallingClock(stall)
     mocker.patch.object(base_experiment, "datetime", clock)
+    mocker.patch.object(nimlibp2p, "time", clock)
     mocker.patch.object(asyncio, "sleep", clock.sleep)
     mocker.patch.object(nimlibp2p, "requester_address", return_value=REQUESTER)
     mocker.patch.object(nimlibp2p, "libp2p_dst_node_publish", return_value=None)
@@ -89,7 +94,7 @@ async def run_with_stall(tmp_path, mocker, *, stall: float, messages: int) -> li
     mocker.patch.object(NimLibp2pExperiment, "_dwell_and_capture", mocker.AsyncMock())
     exp = NimLibp2pExperiment(
         api_client=ApiClient(),
-        config=ExpConfig(num_messages=messages, delay_after_publish=1),
+        config=ExpConfig(num_messages=messages, delay_after_publish=delay),
         namespace="ns",
         output_folder=tmp_path / "run",
     )
@@ -100,16 +105,21 @@ async def run_with_stall(tmp_path, mocker, *, stall: float, messages: int) -> li
     return exp._failures
 
 
-# 600 messages have a stable window; 20 are measured over the whole loop.
-@pytest.mark.parametrize("messages", [600, 20])
+# 600 messages have a stable window; shorter runs are measured over the whole loop.
+RUNS = [(600, 1), (20, 1), (10, 0.25)]
+
+
+@pytest.mark.parametrize("messages, delay", RUNS)
 @pytest.mark.asyncio
-async def test_a_run_that_published_slower_than_configured_is_invalid(tmp_path, mocker, messages):
+async def test_a_run_that_published_slower_than_configured_is_invalid(
+    tmp_path, mocker, messages, delay
+):
     """The v2.3.0 matrix lost 1.08 s per message to the requester lookup and ran at 0.48 msg/s."""
-    failures = await run_with_stall(tmp_path, mocker, stall=1.08, messages=messages)
+    failures = await run_with_stall(tmp_path, mocker, stall=1.08, messages=messages, delay=delay)
     assert any("msg/s" in reason for reason in failures)
 
 
-@pytest.mark.parametrize("messages", [600, 20])
+@pytest.mark.parametrize("messages, delay", RUNS)
 @pytest.mark.asyncio
-async def test_a_run_at_its_configured_rate_is_valid(tmp_path, mocker, messages):
-    assert await run_with_stall(tmp_path, mocker, stall=0, messages=messages) == []
+async def test_a_run_at_its_configured_rate_is_valid(tmp_path, mocker, messages, delay):
+    assert await run_with_stall(tmp_path, mocker, stall=0, messages=messages, delay=delay) == []
