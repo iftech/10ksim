@@ -7,7 +7,7 @@ from datetime import timedelta
 from typing import List, Literal
 
 import aiohttp
-from kubernetes.client import V1ExecAction, V1Probe
+from kubernetes.client import V1Probe
 from pydantic import BaseModel, ConfigDict, Field, NonNegativeFloat, NonNegativeInt, PositiveInt
 
 # Project Imports
@@ -105,7 +105,9 @@ def build_relays(namespace: str, config: ExpConfig) -> V1Deployable:
     )
     container = find_waku_container_config(builder.config)
     container.command_config.insert_commands([subscribe_on_start(config.content_topic)], index=0)
-    container.with_readiness_probe(messaging_readiness_probe(config.content_topic), overwrite=True)
+    container.with_readiness_probe(
+        messaging_readiness_probe(container.readiness_probe, config.content_topic), overwrite=True
+    )
     return builder.build()
 
 
@@ -118,22 +120,15 @@ def subscribe_on_start(content_topic: str) -> str:
     )
 
 
-def messaging_readiness_probe(content_topic: str) -> V1Probe:
-    """Ready once the node is subscribed to the topic and `/health` reports `Connected`."""
-    check = (
-        f"curl -sf localhost:{REST_PORT}/messaging/v1/subscriptions"
-        f" | grep -qF '\"{content_topic}\"'"
-        f" && curl -sf localhost:{REST_PORT}/health"
-        f' | grep -qF \'"connectionStatus":"Connected"\''
+def messaging_readiness_probe(probe: V1Probe, content_topic: str) -> V1Probe:
+    """`probe`, after a subscription check that is skipped once it has passed."""
+    subscribed = (
+        f"[ -f /tmp/subscribed ] || {{ curl -sf localhost:{REST_PORT}/messaging/v1/subscriptions"
+        f" | grep -qF '\"{content_topic}\"' && touch /tmp/subscribed; }} || exit 1;\n"
     )
-    return V1Probe(
-        _exec=V1ExecAction(command=["/bin/sh", "-c", check]),
-        success_threshold=5,
-        initial_delay_seconds=5,
-        period_seconds=1,
-        failure_threshold=2,
-        timeout_seconds=5,
-    )
+    shell, flag, check = probe._exec.command
+    probe._exec.command = [shell, flag, subscribed + check]
+    return probe
 
 
 @experiment(name="logos-messaging")
