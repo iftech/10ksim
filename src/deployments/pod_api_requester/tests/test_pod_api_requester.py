@@ -6,6 +6,7 @@ from kubernetes.client import V1ConfigMap, V1Role, V1RoleBinding, V1Service
 from src.deployments.core.configs.container import Image
 from src.deployments.core.configs.helpers.utils import find_container_config
 from src.deployments.pod_api_requester.builder import PodApiRequesterBuilder
+from src.deployments.pod_api_requester.pod_api_requester import redact_payloads
 
 
 def test_default_init_enables_requester_base():
@@ -92,3 +93,12 @@ def test_build_requires_mode():
     builder = PodApiRequesterBuilder().with_namespace("ns")
     with pytest.raises(ValueError):
         builder.build()
+
+
+def test_redact_payloads_replaces_nested_payloads():
+    data = {"message": {"payload": "abc", "contentTopic": "/t"}, "items": [{"payload": "d"}]}
+
+    assert redact_payloads(data) == {
+        "message": {"payload": "<redacted>", "contentTopic": "/t"},
+        "items": [{"payload": "<redacted>"}],
+    }
