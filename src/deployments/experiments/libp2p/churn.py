@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 class ChurnConfig(ExpConfig):
+    num_messages: NonNegativeInt = 300
+    """Five minutes at one a second: through the downtime and the rejoin."""
     churn_fraction: float = Field(default=0.2, gt=0, lt=1)
     """Share taken down, from the highest ordinals."""
     churn_at: NonNegativeInt = 30
@@ -32,6 +34,17 @@ class ChurnConfig(ExpConfig):
             raise ValueError(
                 f"churn_fraction {self.churn_fraction} of {self.num_relay_nodes} nodes takes "
                 "none of them down, so the run would report success without any churn"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_publishing_outlasts_downtime(self):
+        """Publishing must run past the rejoin, or the churn is never measured."""
+        rejoin = self.churn_at + self.churn_downtime
+        if self.num_messages * self.delay_after_publish <= rejoin:
+            raise ValueError(
+                f"{self.num_messages} messages {self.delay_after_publish}s apart stop before "
+                f"the rejoin at {rejoin}s, so the run would publish nothing after it"
             )
         return self
 

@@ -37,6 +37,8 @@ NAMESPACE_NAME_LABEL = "kubernetes.io/metadata.name"
 class PartitionConfig(ExpConfig):
     partition_fraction: float = Field(default=0.5, gt=0, lt=1)
     """Share of relay nodes on the first side."""
+    num_messages: NonNegativeInt = 600
+    """Ten minutes at one a second: through the split and the reconvergence after the heal."""
     heal_at: NonNegativeInt = 120
     """Seconds after the first message before the halves may meet."""
     node_start_delay: NonNegativeInt = 240
@@ -57,6 +59,16 @@ class PartitionConfig(ExpConfig):
             raise ValueError(
                 f"partition_fraction {self.partition_fraction} of {self.num_relay_nodes} nodes "
                 f"puts {split} on one side, so the run would report success without a split"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_publishing_outlasts_heal(self):
+        """Publishing must run past the heal, or the reconvergence is never measured."""
+        if self.num_messages * self.delay_after_publish <= self.heal_at:
+            raise ValueError(
+                f"{self.num_messages} messages {self.delay_after_publish}s apart stop before "
+                f"the heal at {self.heal_at}s, so the run would publish nothing after it"
             )
         return self
 
