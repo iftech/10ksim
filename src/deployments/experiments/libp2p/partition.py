@@ -196,6 +196,8 @@ class NetworkPartition(PartitionBase):
 
 
 class PartitionCutConfig(PartitionConfig):
+    num_messages: NonNegativeInt = 600
+    """Ten minutes at one a second: through the cut, the heal and the rejoin."""
     node_start_delay: NonNegativeInt = 60
     """No side labels to wait for before dialling."""
     cut_at: NonNegativeInt = 30
@@ -208,6 +210,16 @@ class PartitionCutConfig(PartitionConfig):
     """One network forming, so no allowance for a half meshing behind a split."""
     anchor_side: Literal["a", "b", ""] = "a"
     """Side the anchor is on during the cut; empty leaves it reachable from both."""
+
+    @model_validator(mode="after")
+    def _check_publishing_outlasts_heal(self):
+        heal = self.cut_at + self.heal_at
+        if self.num_messages * self.delay_after_publish <= heal:
+            raise ValueError(
+                f"{self.num_messages} messages {self.delay_after_publish}s apart stop before "
+                f"the heal at {heal}s, so the run would publish nothing after it"
+            )
+        return self
 
 
 @experiment(name="nimlibp2p-partition-cut")

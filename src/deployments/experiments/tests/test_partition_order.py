@@ -83,3 +83,15 @@ def test_anchor_side_accepts_a_side_or_none(side):
 def test_anchor_side_rejects_anything_else(side):
     with pytest.raises(ValidationError):
         PartitionCutConfig(num_relay_nodes=4, anchor_side=side)
+
+
+@pytest.mark.parametrize("messages, delay", [(20, 1), (150, 1), (75, 2)])
+def test_cut_rejects_publishing_that_stops_before_the_heal(messages, delay):
+    with pytest.raises(ValidationError, match="publish nothing after"):
+        PartitionCutConfig(
+            num_relay_nodes=4,
+            num_messages=messages,
+            delay_after_publish=delay,
+            cut_at=30,
+            heal_at=120,
+        )
