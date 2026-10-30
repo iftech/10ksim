@@ -41,17 +41,13 @@ class ExpConfig(BaseModel):
     num_relay_nodes: NonNegativeInt = 30
     num_messages: NonNegativeInt = 20
     message_size_bytes: NonNegativeInt = 1000
-    delay_cold_start: NonNegativeFloat = 180
+    delay_cold_start: NonNegativeFloat = 60
     delay_after_publish: NonNegativeFloat = 1
-    muxer: Muxer = "quic"
-    # image: Image = Image(repo="soutullostatus/dst-test-node", tag="v2.3.0-d721f9cb")
-    # image: Image = Image(repo="soutullostatus/dst-test-node", tag="v2.3.0-d8a6298d") # Arreglo del addreses vacio
-    image: Image = Image(
-        repo="soutullostatus/dst-test-node", tag="v2.3.0-15af9c59"
-    )  # anterior arreglo en la release
+    muxer: Muxer = "yamux"
+    image: Image = Image(repo="pearsonwhite/dst-nimlibp2p-logging", tag="wip-4.2-1.16.0-amd")
     bootstrap_image: Optional[Image] = None
     """Image for the kad anchor when it is a separate binary; defaults to `image`."""
-    discovery: Discovery = "kad-dht"
+    discovery: Discovery = "static"
     """ "kad-dht" discovers peers through a bootstrap node; "static" uses the CONNECTTO dial."""
     connect_to: NonNegativeInt = 10
     """Number of nodes to try to connect to for each node when starting up"""
@@ -60,8 +56,7 @@ class ExpConfig(BaseModel):
     network_jitter: NonNegativeInt = 0
     network_bandwidth_mbit: NonNegativeInt = 0  # 0 = uncapped; folded into the netem qdisc
     network_loss_pct: float = Field(default=0, ge=0, le=100)  # percent; folded into the netem qdisc
-    node_start_delay: NonNegativeInt = 50
-    node_startup_jitter: NonNegativeInt = 50
+    node_start_delay: NonNegativeInt = 60
     post_publish_dwell: NonNegativeInt = 90
     max_connections: NonNegativeInt = 250
     """Per-node connection cap."""
@@ -72,10 +67,6 @@ class ExpConfig(BaseModel):
     log_capture_lead: NonNegativeInt = 45
     """Seconds of the dwell reserved for the capture; 1000 pods take about 30s."""
     wait_nodes_ready: bool = True
-
-    allowed_machines: list[str] = []
-    avoided_machines: list[str] = []
-    # avoided_machines: list[str] = ["node-02.ih-eu-mda1.misc.vaclab"]
 
     @model_validator(mode="after")
     def _check_bootstrap_nodes(self):
@@ -103,10 +94,8 @@ def build_nodes(
         .with_option(NimLibp2p.peers, params.num_relay_nodes)
         .with_option(NimLibp2p.self_trigger, True)
         .with_option(NimLibp2p.muxer, params.muxer)
-        # .with_option(NimLibp2p.cold_start_delay, params.node_start_delay)
-        .with_option(NimLibp2p.startup_jitter, params.node_startup_jitter)
-        .with_option(NimLibp2p.max_connections, 1100)
-        .with_pull_policy("Always")
+        .with_option(NimLibp2p.cold_start_delay, params.node_start_delay)
+        .with_option(NimLibp2p.max_connections, params.max_connections)
         .with_readiness_probe(readiness_probe_metrics())
         .with_image(params.image)
     )
@@ -132,11 +121,6 @@ def build_nodes(
             rate_mbit=params.network_bandwidth_mbit or None,
             loss_pct=params.network_loss_pct or None,
         )
-
-    # if params.allowed_machines:
-    #     builder = builder.with_allowed_machines(params.allowed_machines)
-    # if params.avoided_machines:
-    #     builder = builder.with_avoided_machines(params.avoided_machines)
 
     return builder.build()
 
@@ -185,8 +169,6 @@ def build_bootstrap_nodes(namespace: str, params: ExpConfig) -> V1StatefulSet:
         .with_option(NimLibp2p.discovery, "kad-dht")
         .with_option(NimLibp2p.muxer, params.muxer)
         .with_option(NimLibp2p.max_connections, params.num_relay_nodes + 100)
-        # .with_option(NimLibp2p.startup_jitter, params.node_start_delay)
-        .with_pull_policy("Always")
         .with_readiness_probe(
             V1Probe(
                 tcp_socket=V1TCPSocketAction(port=8008),
