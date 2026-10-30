@@ -105,8 +105,8 @@ async def run_with_stall(tmp_path, mocker, *, stall: float, messages: int, delay
     return exp._failures
 
 
-# 600 messages have a stable window; shorter runs are measured over the whole loop.
-RUNS = [(600, 1), (20, 1), (10, 0.25)]
+# Long, short, sub-second and slow-cadence runs.
+RUNS = [(600, 1), (20, 1), (10, 0.25), (8, 60)]
 
 
 @pytest.mark.parametrize("messages, delay", RUNS)
@@ -114,8 +114,10 @@ RUNS = [(600, 1), (20, 1), (10, 0.25)]
 async def test_a_run_that_published_slower_than_configured_is_invalid(
     tmp_path, mocker, messages, delay
 ):
-    """The v2.3.0 matrix lost 1.08 s per message to the requester lookup and ran at 0.48 msg/s."""
-    failures = await run_with_stall(tmp_path, mocker, stall=1.08, messages=messages, delay=delay)
+    """The v2.3.0 matrix took 2.08 s per 1 s publish and ran at 0.48 msg/s."""
+    failures = await run_with_stall(
+        tmp_path, mocker, stall=1.08 * delay, messages=messages, delay=delay
+    )
     assert any("msg/s" in reason for reason in failures)
 
 

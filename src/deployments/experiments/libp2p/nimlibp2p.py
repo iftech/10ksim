@@ -13,7 +13,7 @@ from src.deployments.core.configs.container import Image
 from src.deployments.core.k8s_rollout import resolved_images
 from src.deployments.core.pod_logs import capture_pod_logs
 from src.deployments.experiments.base_experiment import BaseExperiment
-from src.deployments.libp2p.bridge import STABLE_END_SHIFT, STABLE_START_SHIFT, Bridge
+from src.deployments.libp2p.bridge import Bridge
 from src.deployments.libp2p.builders.builders import Libp2pStatefulSetBuilder
 from src.deployments.libp2p.builders.builders import Option as NimLibp2p
 from src.deployments.libp2p.builders.helpers import readiness_probe_metrics
@@ -209,15 +209,11 @@ async def publish(config, namespace, random_name, requester) -> bool:
     return False
 
 
-def achieved_publish_rate(sent: List[float], start: float, end: float) -> Optional[float]:
-    """Publishes per second over the stable window, or the whole loop if the run is too short."""
-    stable_start = start + STABLE_START_SHIFT.total_seconds()
-    stable_end = end + STABLE_END_SHIFT.total_seconds()
-    if stable_start < stable_end:
-        start, end = stable_start, stable_end
-    if not sent or end <= start:
+def achieved_publish_rate(sent: List[float]) -> Optional[float]:
+    """Publishes per second from the first publish to the last."""
+    if len(sent) < 2 or sent[-1] <= sent[0]:
         return None
-    return sum(start <= t < end for t in sent) / (end - start)
+    return (len(sent) - 1) / (sent[-1] - sent[0])
 
 
 @experiment(name="nimlibp2p")
@@ -302,7 +298,6 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
 
         tasks = []
         sent = []
-        started = time.monotonic()
         for msg_index in range(self.config.num_messages):
             index = random.randint(0, self._publishable_nodes() - 1)
             random_name = f"{name}-{index}"
@@ -310,7 +305,6 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
             self.log_event({"event": "publish", "node": random_name, "index": msg_index})
             tasks.append(asyncio.create_task(publish(self.config, namespace, random_name, address)))
             await asyncio.sleep(self.config.delay_after_publish)
-        ended = time.monotonic()
         published = await asyncio.gather(*tasks)
         failed = published.count(False)
         self.log_event({"event": "publish_summary", "attempted": len(published), "failed": failed})
@@ -327,12 +321,12 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
                 f"{failed} of {len(published)} messages were never published, so delivery "
                 f"is measured against a denominator the run did not send"
             )
-        self._check_publish_rate(sent, started, ended)
+        self._check_publish_rate(sent)
 
         self.log_event("internal_run_finished")
 
-    def _check_publish_rate(self, sent: List[float], start: float, end: float) -> None:
-        achieved = achieved_publish_rate(sent, start, end)
+    def _check_publish_rate(self, sent: List[float]) -> None:
+        achieved = achieved_publish_rate(sent)
         if achieved is None or not self.config.delay_after_publish:
             return
         configured = 1 / self.config.delay_after_publish
