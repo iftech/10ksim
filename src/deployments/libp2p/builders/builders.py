@@ -23,6 +23,7 @@ class Option:
     service = "SERVICE"
     max_connections = "MAXCONNECTIONS"
     cold_start_delay = "COLDSTARTDELAY"
+    startup_jitter = "STARTUP_JITTER_STEP_MS"
     node_role = "NODE_ROLE"
     discovery = "DISCOVERY"
 
