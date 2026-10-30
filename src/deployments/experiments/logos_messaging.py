@@ -120,15 +120,15 @@ def subscribe_on_start(content_topic: str) -> str:
     )
 
 
-def messaging_readiness_probe(probe: V1Probe, content_topic: str) -> V1Probe:
-    """`probe`, after a subscription check that is skipped once it has passed."""
+def messaging_readiness_probe(mesh_probe: V1Probe, content_topic: str) -> V1Probe:
+    """`mesh_probe` (topic mesh >= dLow), after a subscription check that latches once it passes."""
     subscribed = (
         f"[ -f /tmp/subscribed ] || {{ curl -sf localhost:{REST_PORT}/messaging/v1/subscriptions"
         f" | grep -qF '\"{content_topic}\"' && touch /tmp/subscribed; }} || exit 1;\n"
     )
-    shell, flag, check = probe._exec.command
-    probe._exec.command = [shell, flag, subscribed + check]
-    return probe
+    shell, flag, check = mesh_probe._exec.command
+    mesh_probe._exec.command = [shell, flag, subscribed + check]
+    return mesh_probe
 
 
 @experiment(name="logos-messaging")
