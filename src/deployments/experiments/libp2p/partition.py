@@ -1,9 +1,9 @@
-"""Regression scenario: the network forms as two halves that later meet."""
+"""Regression scenarios: two halves that later meet, and one network cut in two."""
 
 import asyncio
 import logging
 import time
-from typing import ClassVar, List
+from typing import ClassVar, List, Literal
 
 from kubernetes.client import (
     V1LabelSelector,
@@ -21,7 +21,11 @@ from pydantic import Field, NonNegativeFloat, NonNegativeInt, model_validator
 from src.deployments.core.k8s_cleanup import delete_network_policy
 from src.deployments.core.k8s_rollout import get_pods_for_statefulset, label_pods
 from src.deployments.experiments.libp2p.disturbance import check_partition_applied
-from src.deployments.experiments.libp2p.nimlibp2p import ExpConfig, NimLibp2pExperiment
+from src.deployments.experiments.libp2p.nimlibp2p import (
+    BOOTSTRAP_NAME,
+    ExpConfig,
+    NimLibp2pExperiment,
+)
 from src.deployments.registry import experiment
 
 logger = logging.getLogger(__name__)
@@ -33,6 +37,8 @@ NAMESPACE_NAME_LABEL = "kubernetes.io/metadata.name"
 class PartitionConfig(ExpConfig):
     partition_fraction: float = Field(default=0.5, gt=0, lt=1)
     """Share of relay nodes on the first side."""
+    num_messages: NonNegativeInt = 600
+    """Ten minutes at one a second: through the split and the reconvergence after the heal."""
     heal_at: NonNegativeInt = 120
     """Seconds after the first message before the halves may meet."""
     node_start_delay: NonNegativeInt = 240
@@ -53,6 +59,16 @@ class PartitionConfig(ExpConfig):
             raise ValueError(
                 f"partition_fraction {self.partition_fraction} of {self.num_relay_nodes} nodes "
                 f"puts {split} on one side, so the run would report success without a split"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_publishing_outlasts_heal(self):
+        """Publishing must run past the heal, or the reconvergence is never measured."""
+        if self.num_messages * self.delay_after_publish <= self.heal_at:
+            raise ValueError(
+                f"{self.num_messages} messages {self.delay_after_publish}s apart stop before "
+                f"the heal at {self.heal_at}s, so the run would publish nothing after it"
             )
         return self
 
@@ -109,15 +125,64 @@ def build_partition_policy(name: str, namespace: str, side: str, far_side: str) 
     )
 
 
-@experiment(name="nimlibp2p-partition")
-class NetworkPartition(NimLibp2pExperiment):
-    """Regression run where the network forms as two halves that later meet.
-
-    Measures convergence, not a live cut: a policy only gates opening a connection.
-    """
+class PartitionBase(NimLibp2pExperiment):
+    """Shared split and heal steps for the partition scenarios."""
 
     config: PartitionConfig
     post_run_analysis: ClassVar[str] = "src.analysis.post_run.partition:run_partition_analysis"
+
+    def _sides(self, nodes: V1StatefulSet) -> tuple[List[str], List[str]]:
+        side_a, side_b = partition_sides(nodes, self.config.partition_fraction)
+        if not side_a or not side_b:
+            raise ValueError(
+                f"partition_fraction {self.config.partition_fraction} leaves one side empty "
+                f"at {nodes.spec.replicas} nodes; there would be no split to measure"
+            )
+        return side_a, side_b
+
+    def _label_sides(self, nodes: V1StatefulSet, anchor_side: str = "") -> None:
+        side_a, side_b = self._sides(nodes)
+        labelled = label_pods(side_a, self.namespace, {SIDE_LABEL: "a"}, self.api_client)
+        labelled += label_pods(side_b, self.namespace, {SIDE_LABEL: "b"}, self.api_client)
+        expected = len(side_a) + len(side_b)
+        if anchor_side and self.config.discovery == "kad-dht":
+            # An unlabelled anchor stays reachable from both sides.
+            anchors = [f"{BOOTSTRAP_NAME}-{i}" for i in range(self.config.bootstrap_nodes)]
+            labelled += label_pods(
+                anchors, self.namespace, {SIDE_LABEL: anchor_side}, self.api_client
+            )
+            expected += len(anchors)
+        self.log_event({"event": "partition_labelled", "pods": labelled})
+        if labelled != expected:
+            raise RuntimeError(
+                f"Labelled {labelled} of {expected} pods; an unlabelled pod "
+                "is not covered by the split and would bridge the two halves."
+            )
+
+    async def _apply_policies(self, nodes: V1StatefulSet) -> None:
+        side_a, side_b = self._sides(nodes)
+        policies = [
+            build_partition_policy("partition-a", self.namespace, "a", "b"),
+            build_partition_policy("partition-b", self.namespace, "b", "a"),
+        ]
+        for policy in policies:
+            self.dump_yaml(policy, policy.metadata.name)
+        await self.deploy(deployment=policies, wait_for_ready=False)
+        check_partition_applied(
+            [policy.metadata.name for policy in policies], self.namespace, self.api_client
+        )
+        self.log_event({"event": "partition_applied", "side_a": len(side_a), "side_b": len(side_b)})
+
+    def _heal(self) -> None:
+        self.log_event("partition_heal")
+        for name in ("partition-a", "partition-b"):
+            delete_network_policy(name, self.namespace, self.api_client)
+        self.log_event("partition_healed")
+
+
+@experiment(name="nimlibp2p-partition")
+class NetworkPartition(PartitionBase):
+    """Regression run where the network forms as two halves that later meet."""
 
     async def _wait_for_pods_to_exist(self, nodes: V1StatefulSet, timeout: int = 600) -> None:
         """Existence, not readiness: Ready already means meshed."""
@@ -133,39 +198,54 @@ class NetworkPartition(NimLibp2pExperiment):
             await asyncio.sleep(5)
 
     async def _after_nodes(self, nodes: V1StatefulSet) -> None:
-        side_a, side_b = partition_sides(nodes, self.config.partition_fraction)
-        if not side_a or not side_b:
-            raise ValueError(
-                f"partition_fraction {self.config.partition_fraction} leaves one side empty "
-                f"at {nodes.spec.replicas} nodes; there would be no split to measure"
-            )
-
         await self._wait_for_pods_to_exist(nodes)
-        labelled = label_pods(side_a, self.namespace, {SIDE_LABEL: "a"}, self.api_client)
-        labelled += label_pods(side_b, self.namespace, {SIDE_LABEL: "b"}, self.api_client)
-        self.log_event({"event": "partition_labelled", "pods": labelled})
-        if labelled != len(side_a) + len(side_b):
-            raise RuntimeError(
-                f"Labelled {labelled} of {len(side_a) + len(side_b)} pods; an unlabelled pod "
-                "is not covered by the split and would bridge the two halves."
-            )
-
-        policies = [
-            build_partition_policy("partition-a", self.namespace, "a", "b"),
-            build_partition_policy("partition-b", self.namespace, "b", "a"),
-        ]
-        for policy in policies:
-            self.dump_yaml(policy, policy.metadata.name)
-        await self.deploy(deployment=policies, wait_for_ready=False)
-        check_partition_applied(
-            [policy.metadata.name for policy in policies], self.namespace, self.api_client
-        )
-        self.log_event({"event": "partition_applied", "side_a": len(side_a), "side_b": len(side_b)})
+        self._label_sides(nodes)
+        await self._apply_policies(nodes)
 
     async def _mid_run(self, nodes: V1StatefulSet) -> None:
         await asyncio.sleep(self.config.heal_at)
+        self._heal()
 
-        self.log_event("partition_heal")
-        for name in ("partition-a", "partition-b"):
-            delete_network_policy(name, self.namespace, self.api_client)
-        self.log_event("partition_healed")
+
+class PartitionCutConfig(PartitionConfig):
+    num_messages: NonNegativeInt = 600
+    """Ten minutes at one a second: through the cut, the heal and the rejoin."""
+    node_start_delay: NonNegativeInt = 60
+    """No side labels to wait for before dialling."""
+    cut_at: NonNegativeInt = 30
+    """Seconds after the first message before the halves are cut apart."""
+    heal_at: NonNegativeInt = 120
+    """Seconds after the cut before the halves may meet again."""
+    wait_nodes_ready: bool = True
+    """Ready means already meshed, which the cut has to follow."""
+    delay_cold_start: NonNegativeFloat = 60
+    """One network forming, so no allowance for a half meshing behind a split."""
+    anchor_side: Literal["a", "b", ""] = "a"
+    """Side the anchor is on during the cut; empty leaves it reachable from both."""
+
+    @model_validator(mode="after")
+    def _check_publishing_outlasts_heal(self):
+        heal = self.cut_at + self.heal_at
+        if self.num_messages * self.delay_after_publish <= heal:
+            raise ValueError(
+                f"{self.num_messages} messages {self.delay_after_publish}s apart stop before "
+                f"the heal at {heal}s, so the run would publish nothing after it"
+            )
+        return self
+
+
+@experiment(name="nimlibp2p-partition-cut")
+class NetworkPartitionCut(PartitionBase):
+    """Regression run where one formed network is cut in two and later healed."""
+
+    config: PartitionCutConfig
+
+    async def _after_nodes(self, nodes: V1StatefulSet) -> None:
+        """Label at readiness: a policy cuts a freshly labelled pod about 20 s late."""
+        self._label_sides(nodes, anchor_side=self.config.anchor_side)
+
+    async def _mid_run(self, nodes: V1StatefulSet) -> None:
+        await asyncio.sleep(self.config.cut_at)
+        await self._apply_policies(nodes)
+        await asyncio.sleep(self.config.heal_at)
+        self._heal()
