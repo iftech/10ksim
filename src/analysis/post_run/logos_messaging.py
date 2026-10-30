@@ -214,12 +214,12 @@ def settings_reliability(line: str) -> Optional[str]:
 
 
 def relay_statefulsets(metadata: dict) -> List[Tuple[str, int]]:
-    """Statefulsets of the messaging nodes and their sizes. The bootstrap only does discovery."""
+    """Statefulsets of the messaging nodes and their sizes. Bootstrap and Store nodes have no API."""
     stack = metadata["stack"]
     return [
         (name, count)
         for name, count in zip(stack["stateful_sets"], stack["nodes_per_statefulset"])
-        if "bootstrap" not in name
+        if not name.startswith(("bootstrap", "store"))
     ]
 
 

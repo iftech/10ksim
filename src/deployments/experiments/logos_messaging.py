@@ -8,7 +8,15 @@ from typing import List, Literal
 
 import aiohttp
 from kubernetes.client import V1Probe
-from pydantic import BaseModel, ConfigDict, Field, NonNegativeFloat, NonNegativeInt, PositiveInt
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    NonNegativeFloat,
+    NonNegativeInt,
+    PositiveInt,
+    model_validator,
+)
 
 # Project Imports
 from src.deployments.core.configs.container import Image
@@ -24,7 +32,7 @@ from src.deployments.pod_api_requester.pod_api_requester import PodApiError, req
 from src.deployments.registry import experiment
 from src.deployments.waku.bridge import Bridge
 from src.deployments.waku.builders.builders import WakuStatefulSetBuilder
-from src.deployments.waku.builders.helpers import find_waku_container_config
+from src.deployments.waku.builders.helpers import find_waku_command, find_waku_container_config
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +49,16 @@ class ExpConfig(BaseModel):
 
     num_relay_nodes: PositiveInt = 20
     num_bootstrap_nodes: PositiveInt = 3
+    num_store_nodes: NonNegativeInt = 0
+    """Store nodes without the Messaging API."""
+    num_edge_nodes: NonNegativeInt = 0
+    """Messaging API nodes in Edge mode, sent to like the relays."""
+    reliability: bool = False
+    """Confirm each send with a Store node."""
+    idle_before_edge: NonNegativeFloat = 0
+    """Wait between the relays and Store nodes being ready and deploying the Edge nodes."""
+    delay_cold_start: NonNegativeFloat = 0
+    """Wait between all nodes being ready and the first send."""
     num_messages: NonNegativeInt = 20
     msg_size_kbytes: PositiveInt = 1
     delay_after_publish: NonNegativeFloat = 1
@@ -57,6 +75,14 @@ class ExpConfig(BaseModel):
             "radiken/pod-api-requester@sha256:eb89ef86b3cb7608a8d869bc1c5a0962bf2737bd0f9b41162c5f049fb281e5d0"
         )
     )
+
+    @model_validator(mode="after")
+    def check_store_nodes(self):
+        if self.reliability and not self.num_store_nodes:
+            raise ValueError("reliability needs Store nodes")
+        if self.num_edge_nodes and self.num_store_nodes < 2:
+            raise ValueError("Edge nodes report Connected only with 2 Store peers")
+        return self
 
 
 class MessagingBridge(Bridge):
@@ -88,27 +114,64 @@ def build_bootstrap(namespace: str, config: ExpConfig) -> V1Deployable:
     )
 
 
-def build_relays(namespace: str, config: ExpConfig) -> V1Deployable:
-    args = {
-        "--log-level": config.log_level,
-        "--entry-layer": "messaging",
-        "--reliability": "false",
-    }
-    builder = (
+def node_builder(
+    name: str, num_nodes: int, namespace: str, config: ExpConfig, args: dict
+) -> WakuStatefulSetBuilder:
+    return (
         WakuStatefulSetBuilder()
-        .with_waku_config(name="relay-0", namespace=namespace, num_nodes=config.num_relay_nodes)
+        .with_waku_config(name=name, namespace=namespace, num_nodes=num_nodes)
         .with_regression(CMD_TYPE, config.num_bootstrap_nodes)
         .with_env("SERVICE", "zerotesting-bootstrap")
-        .with_args(args, on_duplicate="replace")
-        .with_binary(LOGOS_DELIVERY_BINARY)
-        .with_image(config.image)
+        .with_args({"--log-level": config.log_level, **args}, on_duplicate="replace")
     )
+
+
+def messaging_builder(
+    name: str, num_nodes: int, namespace: str, config: ExpConfig, args: dict
+) -> WakuStatefulSetBuilder:
+    """Messaging API nodes that subscribe to the content topic at startup."""
+    args = {
+        "--entry-layer": "messaging",
+        "--reliability": str(config.reliability).lower(),
+        **args,
+    }
+    builder = node_builder(name, num_nodes, namespace, config, args)
     container = find_waku_container_config(builder.config)
     container.command_config.insert_commands([subscribe_on_start(config.content_topic)], index=0)
+    return builder
+
+
+def build_relays(namespace: str, config: ExpConfig) -> V1Deployable:
+    builder = messaging_builder("relay-0", config.num_relay_nodes, namespace, config, {})
+    container = find_waku_container_config(builder.config)
     container.with_readiness_probe(
         messaging_readiness_probe(container.readiness_probe, config.content_topic), overwrite=True
     )
-    return builder.build()
+    return builder.with_binary(LOGOS_DELIVERY_BINARY).with_image(config.image).build()
+
+
+def build_edge_nodes(namespace: str, config: ExpConfig) -> V1Deployable:
+    """Edge mode nodes. They find their filter, lightpush and Store peers through discv5."""
+    builder = messaging_builder(
+        "edge-0", config.num_edge_nodes, namespace, config, {"--mode": "Edge"}
+    )
+    container = find_waku_container_config(builder.config)
+    command = find_waku_command(container.command_config)
+    # Edge mode only sets flags that are unset, so an explicit --relay would keep relay on.
+    command.args = [
+        arg for arg in command.args if not (isinstance(arg, tuple) and arg[0] == "--relay")
+    ]
+    container.with_readiness_probe(
+        edge_readiness_probe(container.readiness_probe, config.content_topic), overwrite=True
+    )
+    return builder.with_binary(LOGOS_DELIVERY_BINARY).with_image(config.image).build()
+
+
+def build_store_nodes(namespace: str, config: ExpConfig) -> V1Deployable:
+    """Relays without the Messaging API that archive every message in a Postgres sidecar."""
+    builder = node_builder("store-0", config.num_store_nodes, namespace, config, {}).with_store()
+    builder.config.namespace = namespace
+    return builder.with_binary(LOGOS_DELIVERY_BINARY).with_image(config.image).build()
 
 
 def subscribe_on_start(content_topic: str) -> str:
@@ -120,15 +183,29 @@ def subscribe_on_start(content_topic: str) -> str:
     )
 
 
-def messaging_readiness_probe(mesh_probe: V1Probe, content_topic: str) -> V1Probe:
-    """`mesh_probe` (topic mesh >= dLow), after a subscription check that latches once it passes."""
-    subscribed = (
+def subscription_check(content_topic: str) -> str:
+    """Shell check that the node is subscribed to the topic. It latches once it passes."""
+    return (
         f"[ -f /tmp/subscribed ] || {{ curl -sf localhost:{REST_PORT}/messaging/v1/subscriptions"
         f" | grep -qF '\"{content_topic}\"' && touch /tmp/subscribed; }} || exit 1;\n"
     )
+
+
+def messaging_readiness_probe(mesh_probe: V1Probe, content_topic: str) -> V1Probe:
+    """`mesh_probe` (topic mesh >= dLow), after a subscription check that latches once it passes."""
     shell, flag, check = mesh_probe._exec.command
-    mesh_probe._exec.command = [shell, flag, subscribed + check]
+    mesh_probe._exec.command = [shell, flag, subscription_check(content_topic) + check]
     return mesh_probe
+
+
+def edge_readiness_probe(probe: V1Probe, content_topic: str) -> V1Probe:
+    """`probe` timings, the subscription check, then `/health` `Connected` (Edge has no mesh)."""
+    connected = (
+        f'curl -sf localhost:{REST_PORT}/health | grep -qF \'"connectionStatus":"Connected"\'\n'
+    )
+    shell, flag, _ = probe._exec.command
+    probe._exec.command = [shell, flag, subscription_check(content_topic) + connected]
+    return probe
 
 
 @experiment(name="logos-messaging")
@@ -171,12 +248,22 @@ class LogosMessagingExperiment(BaseExperiment[ExpConfig]):
 
         await self.deploy(deployment=build_bootstrap(self.namespace, self.config))
         relays = build_relays(self.namespace, self.config)
-        await self.deploy(deployment=relays)
+        stores = (
+            [build_store_nodes(self.namespace, self.config)] if self.config.num_store_nodes else []
+        )
+        await self.deploy(deployment=[relays, *stores])
+        senders = [relays]
+        if self.config.num_edge_nodes:
+            if not self.dry_run:
+                await asyncio.sleep(self.config.idle_before_edge)
+            senders.append(build_edge_nodes(self.namespace, self.config))
+            await self.deploy(deployment=senders[-1])
         if self.dry_run:
             self.log_event("dry_run_done")
             return
 
-        pods = [f"{relays.metadata.name}-{index}" for index in range(relays.spec.replicas)]
+        await asyncio.sleep(self.config.delay_cold_start)
+        pods = [f"{s.metadata.name}-{index}" for s in senders for index in range(s.spec.replicas)]
         requester = requester_address(self.namespace)
         await clear_requester_cache(requester)
 
