@@ -3,7 +3,7 @@ import logging
 import random
 import time
 import traceback
-from typing import ClassVar, Literal, Optional
+from typing import ClassVar, List, Literal, Optional
 
 from kubernetes.client import V1Probe, V1ServicePort, V1StatefulSet, V1TCPSocketAction
 from pydantic import BaseModel, ConfigDict, Field, NonNegativeFloat, NonNegativeInt, model_validator
@@ -62,6 +62,8 @@ class ExpConfig(BaseModel):
     """Per-node connection cap."""
     max_failed_publishes: NonNegativeInt = 0
     """Publishes that may fail before the run is treated as invalid."""
+    publish_rate_tolerance: NonNegativeFloat = 0.1
+    """Share the achieved rate may be off `1 / delay_after_publish` before the run is invalid."""
     capture_pod_logs: bool = True
     """Pull pod logs with the run, so the analysis does not depend on the log collector."""
     log_capture_lead: NonNegativeInt = 45
@@ -207,6 +209,13 @@ async def publish(config, namespace, random_name, requester) -> bool:
     return False
 
 
+def achieved_publish_rate(sent: List[float]) -> Optional[float]:
+    """Publishes per second from the first publish to the last."""
+    if len(sent) < 2 or sent[-1] <= sent[0]:
+        return None
+    return (len(sent) - 1) / (sent[-1] - sent[0])
+
+
 @experiment(name="nimlibp2p")
 class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -288,9 +297,11 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
         mid_run = asyncio.create_task(self._mid_run(nodes))
 
         tasks = []
+        sent = []
         for msg_index in range(self.config.num_messages):
             index = random.randint(0, self._publishable_nodes() - 1)
             random_name = f"{name}-{index}"
+            sent.append(time.monotonic())
             self.log_event({"event": "publish", "node": random_name, "index": msg_index})
             tasks.append(asyncio.create_task(publish(self.config, namespace, random_name, address)))
             await asyncio.sleep(self.config.delay_after_publish)
@@ -310,8 +321,23 @@ class NimLibp2pExperiment(BaseExperiment[ExpConfig]):
                 f"{failed} of {len(published)} messages were never published, so delivery "
                 f"is measured against a denominator the run did not send"
             )
+        self._check_publish_rate(sent)
 
         self.log_event("internal_run_finished")
+
+    def _check_publish_rate(self, sent: List[float]) -> None:
+        achieved = achieved_publish_rate(sent)
+        if achieved is None or not self.config.delay_after_publish:
+            return
+        configured = 1 / self.config.delay_after_publish
+        self.log_event(
+            {"event": "publish_rate", "configured": configured, "achieved": round(achieved, 3)}
+        )
+        if abs(achieved / configured - 1) > self.config.publish_rate_tolerance:
+            self.fail_run(
+                f"published {achieved:.2f} msg/s against {configured:.2f} configured, so its "
+                f"bandwidth does not compare with runs at the configured rate"
+            )
 
     async def _dwell_and_capture(self) -> None:
         """Wait out the post-publish dwell, capturing pod logs before the pods go away.
