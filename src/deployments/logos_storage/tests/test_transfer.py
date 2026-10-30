@@ -174,17 +174,35 @@ async def test_permanent_download_failure_is_not_retried(operations):
     json.dumps(result)
 
 
-async def test_download_cannot_exceed_its_overall_deadline(operations):
+async def test_download_can_receive_its_receipt_during_response_grace(monkeypatch, operations):
     _, _, download = operations
+    monkeypatch.setattr(transfer, "RESPONSE_GRACE_SECONDS", 0.2)
+
+    async def delayed_receipt(**_kwargs):
+        await asyncio.sleep(0.1)
+        return receipts()[1]
+
+    download.side_effect = delayed_receipt
+    result = await run_transfer(timeout=0.05)
+
+    assert result["status"] == "passed"
+    download.assert_awaited_once()
+    assert 0 < download.await_args.kwargs["timeout"] <= 0.05
+
+
+async def test_download_cannot_exceed_its_overall_deadline(monkeypatch, operations):
+    _, _, download = operations
+    monkeypatch.setattr(transfer, "RESPONSE_GRACE_SECONDS", 0.02)
 
     async def stalled(**_kwargs):
-        await asyncio.sleep(1)
+        await asyncio.Event().wait()
 
     download.side_effect = stalled
     result = await run_transfer(timeout=0.01)
     assert result["status"] == "failed"
     assert result["stage"] == "download"
     assert "Download exceeded" in result["error"]
+    assert result["downloads"][0]["elapsed_seconds"] >= 0.03
     download.assert_awaited_once()
 
 

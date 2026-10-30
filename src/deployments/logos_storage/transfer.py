@@ -7,6 +7,7 @@ from typing import Literal
 
 from src.deployments.pod_api_requester.pod_api_requester import requester_address
 from src.deployments.pod_api_requester.storage import (
+    RESPONSE_GRACE_SECONDS,
     StorageRequestError,
     storage_download,
     storage_upload,
@@ -50,7 +51,7 @@ async def _download_target(
                 raise FileTransferError(f"Download exceeded {timeout}s: {last_error}")
             report["download_attempts"] += 1
             try:
-                async with asyncio.timeout(remaining):
+                async with asyncio.timeout(remaining + RESPONSE_GRACE_SECONDS):
                     download = await storage_download(
                         namespace=namespace,
                         pod=target_pod,
