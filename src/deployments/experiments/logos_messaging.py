@@ -107,7 +107,7 @@ def build_bootstrap(namespace: str, config: ExpConfig) -> V1Deployable:
         )
         .with_bootstrap(CMD_TYPE)
         .with_env("SERVICE", "zerotesting-bootstrap")
-        .with_args({"--log-level": config.log_level}, on_duplicate="replace")
+        .with_args({"--log-level": config.log_level, "--filter": False}, on_duplicate="replace")
         .with_binary(LOGOS_DELIVERY_BINARY)
         .with_image(config.image)
         .build()
