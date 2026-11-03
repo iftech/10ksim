@@ -80,8 +80,8 @@ class ExpConfig(BaseModel):
     def check_store_nodes(self):
         if self.reliability and not self.num_store_nodes:
             raise ValueError("reliability needs Store nodes")
-        if self.num_edge_nodes and self.num_store_nodes < 2:
-            raise ValueError("Edge nodes report Connected only with 2 Store peers")
+        if self.num_edge_nodes and not self.num_store_nodes:
+            raise ValueError("Edge nodes need a Store peer to report PartiallyConnected")
         return self
 
 
@@ -199,9 +199,10 @@ def messaging_readiness_probe(mesh_probe: V1Probe, content_topic: str) -> V1Prob
 
 
 def edge_readiness_probe(probe: V1Probe, content_topic: str) -> V1Probe:
-    """`probe` timings, the subscription check, then `/health` `Connected` (Edge has no mesh)."""
+    """`probe` timings, the subscription check, then `/health` at least `PartiallyConnected`."""
     connected = (
-        f'curl -sf localhost:{REST_PORT}/health | grep -qF \'"connectionStatus":"Connected"\'\n'
+        f"curl -sf localhost:{REST_PORT}/health"
+        f' | grep -qE \'"connectionStatus":"(Partially)?Connected"\'\n'
     )
     shell, flag, _ = probe._exec.command
     probe._exec.command = [shell, flag, subscription_check(content_topic) + connected]
