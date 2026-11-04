@@ -122,6 +122,7 @@ def node_builder(
         .with_waku_config(name=name, namespace=namespace, num_nodes=num_nodes)
         .with_regression(CMD_TYPE, config.num_bootstrap_nodes)
         .with_env("SERVICE", "zerotesting-bootstrap")
+        .with_env("RELAY_MSG_INFO_LOGS", "1")
         .with_args({"--log-level": config.log_level, **args}, on_duplicate="replace")
     )
 
