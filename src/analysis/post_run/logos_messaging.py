@@ -18,6 +18,7 @@ from src.analysis.mesh_analysis.readers.builders.victoria_reader_builder import 
 from src.analysis.mesh_analysis.readers.victoria_reader import VictoriaReader
 from src.analysis.metrics import scrape_utils
 from src.analysis.post_run.metrics import plot_run_metrics, scrape_run_metrics
+from src.analysis.post_run.publish import publish_run_metrics
 from src.deployments.core.event_window_bridge import EventNotFound
 
 if TYPE_CHECKING:
@@ -399,6 +400,7 @@ def scrape_and_plot(experiment: "LogosMessagingExperiment") -> None:
     label = f"{experiment.config.num_relay_nodes} nodes"
     dump = scrape_run_metrics(experiment.metadata, out / "metrics", name=label)
     plot_run_metrics({label: dump}, out / "plots", xlabel=experiment.namespace)
+    publish_run_metrics(experiment.metadata, out.name)
 
 
 def _safe(label: str, query, default):
