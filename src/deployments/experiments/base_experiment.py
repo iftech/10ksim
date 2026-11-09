@@ -36,6 +36,7 @@ from ruamel import yaml
 from src.analysis.post_run_analysis import run_post_analysis
 from src.analysis.utils.log_utils import log_to_path
 from src.deployments.core.base_bridge import BaseBridge
+from src.deployments.core.code_version import code_version
 from src.deployments.core.k8s_cleanup import (
     get_cleanup,
     poll_namespace_has_objects,
@@ -351,6 +352,7 @@ class BaseExperiment(ABC, BaseModel, Generic[TCfg]):
         self._deployed.clear()
         self._setup_log_paths()
         self._dump_initial_metadata()
+        self.log_metadata({"code": code_version()})
 
         with log_to_path(self.out_log_path):
             with ExitStack() as self._stack:

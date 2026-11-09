@@ -50,7 +50,7 @@ def experiment_body(exp: dict, config: ScrapeConfig, run_name: str) -> dict:
         "date": f"{config.start:%Y-%m-%d}",
         "docker_image": exp.get("params", {}).get("image"),
         "metadata": {"run": run_name, "experiment": exp["experiment"]["name"]}
-        | {key: exp[key] for key in ("params", "stack", "results") if key in exp},
+        | {key: exp[key] for key in ("params", "code", "stack", "results") if key in exp},
         "datasets": [_dataset(metric, config) for metric in config.metrics_to_scrape],
         "panels": [],
         "publish": False,
@@ -84,8 +84,24 @@ def publish(body: dict, token: str, url: str = DASHBOARD_URL) -> Optional[str]:
     return experiment_id
 
 
+def unpublishable(exp: dict) -> Optional[str]:
+    """Why a run stays off the dashboard, or None if its 10ksim code was clean and pushed."""
+    code = exp.get("code")
+    if not code:
+        return "no 10ksim commit was recorded"
+    if not code.get("clean"):
+        return f"10ksim had uncommitted changes on top of {code['commit'][:7]}"
+    if not code.get("pushed"):
+        return f"10ksim {code['commit'][:7]} was not pushed"
+    return None
+
+
 def publish_run_metrics(exp: dict, run_name: str) -> Optional[str]:
     """Publish what `scrape_run_metrics` scraped for this run. Logs failures, never raises."""
+    reason = unpublishable(exp)
+    if reason:
+        logger.warning(f"`{run_name}` is not on the dashboard: {reason}")
+        return None
     token = os.environ.get(TOKEN_ENV)
     if not token:
         logger.warning(f"{TOKEN_ENV} is not set; `{run_name}` is not on the dashboard")

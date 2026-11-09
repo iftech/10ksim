@@ -78,10 +78,9 @@ class BaseBridge(BaseModel):
         except ValueError as e:
             logger.info(e)
         metadata["stack"]["name"] = self._get_name(metadata)
-        try:
-            metadata["params"] = all_metadata["params"]
-        except KeyError:
-            pass
+        for key in ("params", "code"):
+            if key in all_metadata:
+                metadata[key] = all_metadata[key]
         return dict(metadata)
 
     def _get_name(self, metadata: dict):

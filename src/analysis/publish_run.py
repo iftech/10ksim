@@ -8,7 +8,13 @@ import sys
 from pathlib import Path
 
 from src.analysis.post_run.metrics import run_scrape_config
-from src.analysis.post_run.publish import DASHBOARD_URL, TOKEN_ENV, experiment_body, publish
+from src.analysis.post_run.publish import (
+    DASHBOARD_URL,
+    TOKEN_ENV,
+    experiment_body,
+    publish,
+    unpublishable,
+)
 from src.analysis.utils.log_utils import init_logger
 
 logger = logging.getLogger(__name__)
@@ -31,6 +37,11 @@ def main() -> None:
         # Same rule as the post-run scrape, so the dashboard holds what the CSVs hold.
         if not exp.get("results", {}).get("stable", {}).get("duration"):
             logger.error(f"`{run.name}` has no stable window; skipping it")
+            failed.append(run.name)
+            continue
+        reason = unpublishable(exp)
+        if reason:
+            logger.error(f"`{run.name}` is not published: {reason}")
             failed.append(run.name)
             continue
         body = experiment_body(exp, run_scrape_config(exp, name=run.name), run.name)

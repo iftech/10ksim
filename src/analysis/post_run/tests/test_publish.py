@@ -71,3 +71,22 @@ def test_a_dataset_without_rows_fails_the_publish_and_is_removed(monkeypatch):
     with pytest.raises(PublishError, match="mesh-peers"):
         publish({"title": "run"}, token="t", url="http://dash")
     assert deleted == ["http://dash/experiments/e1"]
+
+
+@pytest.mark.parametrize(
+    "code, published",
+    [
+        (None, False),
+        ({"commit": "abc1234", "clean": False, "pushed": True}, False),
+        ({"commit": "abc1234", "clean": True, "pushed": False}, False),
+        ({"commit": "abc1234", "clean": True, "pushed": True}, True),
+    ],
+)
+def test_only_runs_from_clean_pushed_code_are_published(monkeypatch, code, published):
+    posted = []
+    monkeypatch.setenv(publish_module.TOKEN_ENV, "t")
+    monkeypatch.setattr(publish_module, "publish", lambda body, token: posted.append(body))
+
+    publish_module.publish_run_metrics({**EXP, "code": code}, "run")
+
+    assert bool(posted) is published
