@@ -14,6 +14,10 @@ STABLE_START_SHIFT = timedelta(minutes=3)
 STABLE_END_SHIFT = timedelta(seconds=-30)
 """How far before publishing ends to stop, so teardown stays out of the window."""
 
+WAN_LATENCY_MS = 50
+"""Standard link profile for the regression matrix, applied on both platforms."""
+WAN_BANDWIDTH_MBIT = 50
+
 
 class Bridge(event_window_bridge.EventWindowBridge):
     interval: Literal["complete", "stable"] = "complete"
