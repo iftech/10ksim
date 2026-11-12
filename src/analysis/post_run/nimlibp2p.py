@@ -9,6 +9,7 @@ from src.analysis.mesh_analysis.analyzers.nimlibp2p_analyzer import Nimlibp2pAna
 from src.analysis.plotting.latency_plotter import plot_dump_latency
 from src.analysis.post_run.delivery_cross_check import counter_deliveries, cross_check, report
 from src.analysis.post_run.metrics import plot_run_metrics, scrape_run_metrics
+from src.analysis.post_run.publish import publish_run_metrics
 
 if TYPE_CHECKING:
     from src.deployments.experiments.libp2p.nimlibp2p import NimLibp2pExperiment
@@ -133,3 +134,4 @@ def _scrape_and_plot(experiment: "NimLibp2pExperiment") -> None:
         experiment.output_folder / "plots",
         xlabel=f"{experiment.namespace}, {experiment.config.num_relay_nodes} nodes",
     )
+    publish_run_metrics(exp, experiment.output_folder.name)
