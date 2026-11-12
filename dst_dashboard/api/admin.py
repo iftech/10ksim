@@ -1,12 +1,15 @@
 """Admin API routes for configuration and data management."""
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from dst_dashboard.auth import create_admin_token, require_admin_token
+from dst_dashboard.config.constants import VICTORIA_RETENTION
+from dst_dashboard.config.data_structures import ExperimentConfig
 from dst_dashboard.config.utils import LoadConfig
 from dst_dashboard.processors.experiment_processor import ExperimentProcessor
 from dst_dashboard.storage.db import DSTDatabase
@@ -52,11 +55,28 @@ def reload_config(request: Request, _: None = Depends(require_admin_token)):
         raise HTTPException(status_code=500, detail=f"Failed to reload configuration: {str(e)}")
 
 
+def _past_retention(start: datetime) -> bool:
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - start > VICTORIA_RETENTION
+
+
 @router.delete("/datasets/{experiment_id}/{dataset_name}")
 def clear_dataset(experiment_id: str, dataset_name: str, _: None = Depends(require_admin_token)):
-    """Clear cached dataset data to force re-fetch on next request."""
+    """Clear cached dataset data to force re-fetch on next reprocess."""
     try:
         db = DSTDatabase()
+
+        experiment_data = db.get_experiment(experiment_id)
+        if experiment_data is None:
+            raise HTTPException(status_code=404, detail="Experiment not found")
+        datasets = ExperimentConfig(**experiment_data).datasets
+        dataset = next((d for d in datasets if d.name == dataset_name), None)
+        if dataset is not None and _past_retention(dataset.timeRange.start):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Dataset '{dataset_name}' is past retention and could not be re-fetched",
+            )
 
         if db.delete_dataset(experiment_id, dataset_name):
             logger.info(f"Cleared dataset: {experiment_id}:{dataset_name}")
@@ -72,22 +92,6 @@ def clear_dataset(experiment_id: str, dataset_name: str, _: None = Depends(requi
     except Exception as e:
         logger.error(f"Failed to clear dataset: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to clear dataset: {str(e)}")
-
-
-@router.delete("/datasets")
-def clear_all_datasets(_: None = Depends(require_admin_token)):
-    """Clear all cached dataset data to force re-fetch."""
-    try:
-        db = DSTDatabase()
-        count = db.clear_all_dataset_cache()
-
-        logger.info(f"Cleared {count} datasets")
-
-        return {"status": "success", "message": f"Cleared {count} datasets successfully"}
-
-    except Exception as e:
-        logger.error(f"Failed to clear datasets: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to clear datasets: {str(e)}")
 
 
 @router.post("/experiments/{experiment_id}/reprocess")
@@ -107,8 +111,6 @@ def reprocess_experiment(
         config = request.app.state.config
 
         # Initialize processor
-        from dst_dashboard.config.data_structures import ExperimentConfig
-
         processor = ExperimentProcessor(config, db)
 
         experiment = ExperimentConfig(**experiment_data)
