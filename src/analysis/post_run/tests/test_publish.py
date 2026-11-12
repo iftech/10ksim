@@ -46,24 +46,21 @@ def test_each_scraped_metric_is_a_dataset_over_the_stable_window():
     assert {"instance", "type", "dir"} <= set(open_streams)
 
 
-def test_a_dataset_without_rows_fails_the_publish_and_is_removed(monkeypatch):
+@pytest.mark.parametrize("created", [True, False])
+def test_a_dataset_without_rows_fails_the_publish_and_is_removed(monkeypatch, created):
     deleted = []
-    monkeypatch.setattr(
-        publish_module.requests, "post", lambda *a, **k: _Response(201, {"id": "e1"})
-    )
-    monkeypatch.setattr(
-        publish_module.requests,
-        "get",
-        lambda *a, **k: _Response(
-            200,
-            {
-                "datasets": [
-                    {"name": "libp2p-in", "rowCount": 7},
-                    {"name": "mesh-peers", "rowCount": 0},
-                ]
-            },
-        ),
-    )
+    gets = {
+        "http://dash/experiments": [{"id": "e0", "title": "other"}, {"id": "e1", "title": "run"}],
+        "http://dash/experiments/e1/datasets": {
+            "datasets": [
+                {"name": "libp2p-in", "rowCount": 7},
+                {"name": "mesh-peers", "rowCount": 0},
+            ]
+        },
+    }
+    post = _Response(201, {"id": "e1"}) if created else _Response(409)
+    monkeypatch.setattr(publish_module.requests, "post", lambda *a, **k: post)
+    monkeypatch.setattr(publish_module.requests, "get", lambda url, **k: _Response(200, gets[url]))
     monkeypatch.setattr(
         publish_module.requests, "delete", lambda url, **k: deleted.append(url) or _Response(204)
     )

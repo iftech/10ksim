@@ -57,30 +57,39 @@ def experiment_body(exp: dict, config: ScrapeConfig, run_name: str) -> dict:
     }
 
 
-def _empty_datasets(datasets: dict) -> List[str]:
-    return [d["name"] for d in datasets["datasets"] if not d.get("rowCount")]
+def _existing_id(title: str, url: str) -> str:
+    response = requests.get(f"{url}/experiments", timeout=TIMEOUT_S)
+    response.raise_for_status()
+    ids = [e["id"] for e in response.json() if e["title"] == title]
+    if not ids:
+        raise PublishError(f"`{title}` got a 409 but is not on the dashboard")
+    return ids[0]
 
 
-def publish(body: dict, token: str, url: str = DASHBOARD_URL) -> Optional[str]:
-    """Create the experiment and check every dataset got rows; returns None if already there."""
+def _empty_datasets(experiment_id: str, url: str) -> List[str]:
+    response = requests.get(f"{url}/experiments/{experiment_id}/datasets", timeout=TIMEOUT_S)
+    response.raise_for_status()
+    return [d["name"] for d in response.json()["datasets"] if not d.get("rowCount")]
+
+
+def publish(body: dict, token: str, url: str = DASHBOARD_URL) -> str:
+    """Create the experiment, or find the one already there, and check every dataset has rows."""
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.post(f"{url}/experiments", json=body, headers=headers, timeout=TIMEOUT_S)
     if response.status_code == 409:
-        logger.info(f"`{body['title']}` is already on the dashboard")
-        return None
-    response.raise_for_status()
-    experiment_id = response.json()["id"]
+        experiment_id = _existing_id(body["title"], url)
+    else:
+        response.raise_for_status()
+        experiment_id = response.json()["id"]
 
-    response = requests.get(f"{url}/experiments/{experiment_id}/datasets", timeout=TIMEOUT_S)
-    response.raise_for_status()
-    empty = _empty_datasets(response.json())
+    empty = _empty_datasets(experiment_id, url)
     if empty:
         requests.delete(
             f"{url}/experiments/{experiment_id}", headers=headers, timeout=TIMEOUT_S
         ).raise_for_status()
         raise PublishError(f"`{body['title']}` got no rows for {empty}; removed it")
 
-    logger.info(f"Published `{body['title']}` to the dashboard as {experiment_id}")
+    logger.info(f"`{body['title']}` is on the dashboard as {experiment_id}")
     return experiment_id
 
 
