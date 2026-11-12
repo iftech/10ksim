@@ -1,7 +1,7 @@
 import logging
 import traceback
 from pathlib import Path
-from typing import Iterable, List, Optional, Self
+from typing import Dict, Iterable, List, Literal, Optional, Self
 
 import pandas as pd
 import seaborn as sns
@@ -61,6 +61,7 @@ class Nimlibp2pAnalyzer(Analyzer):
     """
 
     msg_hash_key: str = "msgId"
+    enable_cache: bool = False
 
     def with_ss_check(
         self,
@@ -202,17 +203,32 @@ class Nimlibp2pAnalyzer(Analyzer):
         has_shards: bool,
         peer_identifier: str,
     ) -> MessageReliabilityResult:
-        dfs = self.data_puller.get_all_node_dataframes(tracer, stateful_sets, nodes_per_ss)
-        # Strip suffix for local read.
-        for dfs_dicts in dfs:
-            for _key, df_list in dfs_dicts.items():
-                for df in df_list:
-                    df["kubernetes.pod_name"] = df["kubernetes.pod_name"].str.removesuffix(".log")
-        dfs = self._merge_dfs(dfs, has_shards)
-        self.adjust_dfs(dfs)
-        result = self._dump_dfs(dfs)
-        if result.is_err():
-            logger.warning(f"Issue dumping message summary. {result.err_value}")
+        dfs = None
+        if self.enable_cache:
+            received = Path(self._get_dump_path("received"))
+            sent = Path(self._get_dump_path("sent"))
+            if received.exists() and sent.exists():
+                dfs = [pd.read_csv(received), pd.read_csv(sent)]
+                columns = [self.msg_hash_key, "timestamp"]
+                if has_shards:
+                    columns = ["shard"] + columns
+                for df in dfs:
+                    df.set_index(columns, inplace=True)
+                    df.sort_index(inplace=True)
+        if dfs is None:
+            dfs = self.data_puller.get_all_node_dataframes(tracer, stateful_sets, nodes_per_ss)
+            # Strip suffix for local read.
+            for dfs_dicts in dfs:
+                for _key, df_list in dfs_dicts.items():
+                    for df in df_list:
+                        df["kubernetes.pod_name"] = df["kubernetes.pod_name"].str.removesuffix(
+                            ".log"
+                        )
+            dfs = self._merge_dfs(dfs, has_shards)
+            self.adjust_dfs(dfs)
+            result = self._dump_dfs(dfs)
+            if result.is_err():
+                logger.warning(f"Issue dumping message summary. {result.err_value}")
 
         reliability_results = self._has_message_reliability_issues(
             "shard" if has_shards else None,
@@ -259,13 +275,14 @@ class Nimlibp2pAnalyzer(Analyzer):
                 df["receiver_peer_id"] == unknown_key, "kubernetes.pod_name"
             ].map(pod_to_peer_map)
 
+    def _get_dump_path(self, data_type: Literal["received", "sent"]):
+        return self._dump_analysis_path / "summary" / f"{data_type}.csv"
+
     def _dump_dfs(self, dfs: List[pd.DataFrame]) -> Result:
         received = dfs[0].reset_index()
         received = received.astype(str)
         logger.info("Dumping received information")
-        result = file_utils.dump_df_as_csv(
-            received, self._dump_analysis_path / "summary" / "received.csv", False
-        )
+        result = file_utils.dump_df_as_csv(received, self._get_dump_path("received"), False)
         if result.is_err():
             logger.warning(result.err_value)
             return Err(result.err_value)
@@ -273,16 +290,14 @@ class Nimlibp2pAnalyzer(Analyzer):
         sent = dfs[1].reset_index()
         sent = sent.astype(str)
         logger.info("Dumping sent information")
-        result = file_utils.dump_df_as_csv(
-            sent, self._dump_analysis_path / "summary" / "sent.csv", False
-        )
+        result = file_utils.dump_df_as_csv(sent, self._get_dump_path("sent"), False)
         if result.is_err():
             logger.warning(result.err_value)
             return Err(result.err_value)
 
         return Ok(None)
 
-    def _merge_dfs(self, dfs: List[List[pd.DataFrame]], has_shard: bool) -> List[pd.DataFrame]:
+    def _merge_dfs(self, dfs: List[Dict[str, pd.DataFrame]], has_shard: bool) -> List[pd.DataFrame]:
         logger.info("Merging and sorting information")
 
         received_df = pd.concat(
