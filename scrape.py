@@ -11,23 +11,22 @@ from src.analysis.metrics.libp2p.scrape import Nimlibp2pScrapeBuilder
 from src.analysis.metrics.scrapper import Scrapper
 from src.analysis.plotting.config import PlotConfigBuilder
 from src.analysis.plotting.metrics_plotter import MetricsPlotter
+from src.analysis.utils.experiment_classes import subclass_names
 from src.analysis.utils.file_utils import extract_exps, get_folders
 from src.analysis.utils.log_utils import init_logger
+from src.deployments.experiments.libp2p.nimlibp2p import NimLibp2pExperiment
 
 logger = logging.getLogger(__name__)
 
 
 def get_nimlibp2p_exps(folder: Union[str, Path]) -> Iterable[dict]:
-    experiment_class = "NimLibp2pExperiment"
+    # Subclasses too, or the adverse-condition scenarios are skipped and never scraped.
+    accepted = subclass_names(NimLibp2pExperiment)
 
     def filter_by_class(exp) -> bool:
-        if exp["experiment"]["class"] != experiment_class:
-            return False
-        return True
+        return exp["experiment"]["class"] in accepted
 
-    filters = []
-    if experiment_class:
-        filters.append(filter_by_class)
+    filters = [filter_by_class]
 
     paths = [folder / path for path in get_folders(Path(folder), "metadata.json")]
     for exp in extract_exps(paths, filters):
