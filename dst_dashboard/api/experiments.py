@@ -117,15 +117,20 @@ def create_experiment(
 
     # Process the experiment (fetch datasets, generate panels)
     processor = get_processor(request)
-    success = processor.process_experiment(experiment)
-
-    if not success:
-        # Rollback - delete from DB if processing failed
+    try:
+        processor.process_experiment(experiment)
+        empty = [
+            d.name
+            for d in experiment.datasets
+            if not (db.get_dataset_metadata(experiment.id, d.name) or {}).get("row_count")
+        ]
+        if empty:
+            raise HTTPException(
+                status_code=502, detail=f"No rows fetched for datasets {empty}; nothing was stored"
+            )
+    except Exception:
         db.delete_experiment(experiment.id)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to process experiment. Check that all datasets and datasources are valid.",
-        )
+        raise
 
     return experiment
 

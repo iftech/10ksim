@@ -1,6 +1,10 @@
 import os
+from datetime import timedelta
 from enum import StrEnum
 from pathlib import Path
+
+# VictoriaLogs and VictoriaMetrics keep 6 months (retentionPeriod=6).
+VICTORIA_RETENTION = timedelta(days=180)
 
 DEFAULT_CONFIG_PATH = Path.home() / ".cache" / "dst_dashboard" / "config.yaml"
 DEFAULT_DATA_PATH = Path.home() / ".cache" / "dst_dashboard" / "data"

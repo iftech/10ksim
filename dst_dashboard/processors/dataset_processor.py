@@ -20,6 +20,8 @@ from src.analysis.metrics import scrape_utils
 
 logger = logging.getLogger(__name__)
 
+VM_QUERY_TIMEOUT_S = 120
+
 _victorialogs_log_init_lock = threading.Lock()
 _victorialogs_log_initialized = False
 
@@ -329,7 +331,7 @@ class DatasetProcessor:
 
         try:
             # Execute query
-            result = scrape_utils.get_query_data(promql_url)
+            result = scrape_utils.get_query_data(promql_url, timeout=VM_QUERY_TIMEOUT_S)
 
             match result:
                 case Ok(data):

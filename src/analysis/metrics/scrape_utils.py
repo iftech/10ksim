@@ -27,8 +27,8 @@ def create_promql(
     return promql
 
 
-def get_query_data(request: str) -> Result[Dict, str]:
-    response = urllib.request.urlopen(request, timeout=30)
+def get_query_data(request: str, timeout: float = 30) -> Result[Dict, str]:
+    response = urllib.request.urlopen(request, timeout=timeout)
 
     logger.debug(f"Response: {response.status}")
     if response.status != 200:
