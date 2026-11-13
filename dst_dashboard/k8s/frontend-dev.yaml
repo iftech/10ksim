@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dst-dashboard-frontend-dev
+  namespace: dst-dashboard
+spec:
+  serviceName: dst-dashboard-frontend-dev
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dst-dashboard-frontend-dev
+  template:
+    metadata:
+      labels:
+        app: dst-dashboard-frontend-dev
+        app.kubernetes.io/name: dst-dashboard-frontend-dev
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - metal-01.he-eu-hel1.misc.vacdst
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "monitoring"
+          effect: "PreferNoSchedule"
+      containers:
+      - name: frontend-dev
+        image: mamoutoudiarra/dst-dashboard-frontend:dev-v1.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dst-dashboard-frontend-dev
+  namespace: dst-dashboard
+spec:
+  selector:
+    app: dst-dashboard-frontend-dev
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dst-dashboard-frontend-dev-ingress
+  namespace: dst-dashboard
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: default-redirect-https@kubernetescrd
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - dev.dashboard.lab.vac.dev
+    secretName: dashboard-frontend-dev-tls
+  rules:
+  - host: dev.dashboard.lab.vac.dev
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: dst-dashboard-frontend-dev
+            port:
+              number: 80

@@ -1,3 +1,4 @@
+# Prod is deployed by Fleet from iftech/vaclab-2 (fleet/dst-dashboard); keep this copy in sync.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -30,7 +31,7 @@ spec:
           effect: "PreferNoSchedule"
       containers:
       - name: frontend
-        image: mamoutoudiarra/dst-dashboard-frontend:v0.5
+        image: mamoutoudiarra/dst-dashboard-frontend:v0.6
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80

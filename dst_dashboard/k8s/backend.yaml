@@ -1,3 +1,4 @@
+# Prod is deployed by Fleet from iftech/vaclab-2 (fleet/dst-dashboard); keep this copy in sync.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,6 +8,7 @@ data:
   config.yaml: |
     # DST Explorer Configuration
     # Global datasources - defined once, referenced by all experiments
+    # Do not use to load experiments (deprecated)
 
     datasources:
       - name: victoria-logs
@@ -49,7 +51,7 @@ spec:
           effect: "PreferNoSchedule"
       containers:
       - name: dst-dashboard-backend
-        image: mamoutoudiarra/dst-dashboard-backend:v0.5
+        image: mamoutoudiarra/dst-dashboard-backend:v1.4
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
@@ -58,7 +60,7 @@ spec:
         - name: DST_MONGO_URI
           valueFrom:
             secretKeyRef:
-              name: dst-mongo-dev-credentials
+              name: dst-mongo-prod-credentials
               key: uri
         - name: DST_JWT_SECRET
           valueFrom:
@@ -67,6 +69,8 @@ spec:
               key: secret
         - name: DST_CONFIG_PATH
           value: /app/config/config.yaml
+        - name: DST_ALLOWED_ORIGINS
+          value: "https://dashboard.lab.vac.dev,https://dev.dashboard.lab.vac.dev"
         volumeMounts:
         - name: config
           mountPath: /app/config
@@ -74,7 +78,7 @@ spec:
         resources:
           requests:
             memory: "4Gi"
-            cpu: "4"
+            cpu: "1"
           limits:
             memory: "16Gi"
             cpu: "8"
