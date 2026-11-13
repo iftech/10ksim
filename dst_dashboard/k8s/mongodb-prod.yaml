@@ -1,3 +1,4 @@
+# Prod is deployed by Fleet from iftech/vaclab-2 (fleet/dst-dashboard); keep this copy in sync.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -53,12 +54,12 @@ spec:
             - name: MONGO_INITDB_ROOT_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: dst-mongo-prod-root-credentials
+                  name: dst-mongo-prod-credentials
                   key: username
             - name: MONGO_INITDB_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: dst-mongo-prod-root-credentials
+                  name: dst-mongo-prod-credentials
                   key: password
           volumeMounts:
             - name: mongo-data-prod

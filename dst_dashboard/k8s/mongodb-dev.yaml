@@ -75,7 +75,7 @@ metadata:
   name: mongodb-dev
   namespace: dst-dashboard
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: mongodb-dev
   ports:
