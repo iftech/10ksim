@@ -5,15 +5,19 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional, Sequence
 
 import pandas as pd
 
 from src.analysis.post_run.scenario_common import (
+    MESH_EXPECTATION,
     POD_COLUMN,
     Row,
     event_time,
     latency_summary,
+    load_mesh_peers,
+    mesh_peers_row,
+    pod_names,
     prepare,
     write_table,
 )
@@ -25,6 +29,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 PHASES = ("before", "split", "healed")
+MESH_MOVE = 0.1
+"""Share of its value at the cut a half's mean mesh degree must move by to count as a reaction."""
 
 
 def load_publishes(dump_dir: Path) -> pd.DataFrame:
@@ -151,6 +157,70 @@ def partition_table(
     return rows
 
 
+def mesh_reaction(mesh: pd.DataFrame, pods: Sequence[str], cut: datetime, heal: datetime) -> str:
+    """When, under the split, the pods' mean mesh degree first left its value at the cut.
+
+    A node whose mesh still counts peers it cannot reach reports the same degree as before
+    the cut, so the time this takes is how long the split went unnoticed. It is known only
+    to the scrape step: the move happened between the two snapshots named.
+    """
+    columns = [p for p in pods if p in mesh.columns]
+    mean = mesh[columns].mean(axis=1).dropna()
+    before = mean[mean.index <= cut]
+    under = mean[(mean.index > cut) & (mean.index <= heal)]
+    if before.empty or under.empty:
+        return "no snapshot before the cut" if before.empty else "no snapshot under the split"
+
+    base = before.iloc[-1]
+    moved = under[(under - base).abs() > MESH_MOVE * base]
+    if moved.empty:
+        held = (under.index[-1] - cut).total_seconds()
+        return f"held at {base:.1f} for the {held:.0f}s observed"
+    earlier = under[under.index < moved.index[0]]
+    low = (earlier.index[-1] - cut).total_seconds() if not earlier.empty else 0
+    high = (moved.index[0] - cut).total_seconds()
+    return f"{base:.1f} to {moved.iloc[0]:.1f} between {low:.0f}s and {high:.0f}s after the cut"
+
+
+def mesh_rows(
+    mesh: Optional[pd.DataFrame],
+    side_a: Sequence[str],
+    side_b: Sequence[str],
+    applied: datetime,
+    heal: datetime,
+) -> List[Row]:
+    """Mesh degree of each half: when it reacted to the cut, and where it stood under the
+    split and after the heal."""
+    under_a, under_b, after = (
+        "mesh peers under the split, side a",
+        "mesh peers under the split, side b",
+        "mesh peers after the heal",
+    )
+    if mesh is None or mesh.empty:
+        return [
+            ("mesh reaction to the cut", "no bound yet", "no mesh-peers metrics in the run folder"),
+            *(mesh_peers_row(mesh, item) for item in (under_a, under_b, after)),
+        ]
+
+    def degree(window: pd.DataFrame, item: str, pods: Sequence[str], missing: str) -> Row:
+        if window.empty:
+            return (item, MESH_EXPECTATION, missing)
+        return mesh_peers_row(window, item, pods=pods)
+
+    split = mesh[(mesh.index > applied) & (mesh.index <= heal)]
+    healed = mesh[mesh.index > heal]
+    reaction = "; ".join(
+        f"side {name}: {mesh_reaction(mesh, pods, applied, heal)}"
+        for name, pods in (("a", side_a), ("b", side_b))
+    )
+    return [
+        ("mesh reaction to the cut", "no bound yet", reaction),
+        degree(split, under_a, side_a, "no snapshot under the split"),
+        degree(split, under_b, side_b, "no snapshot under the split"),
+        degree(healed, after, [*side_a, *side_b], "no snapshot after the heal"),
+    ]
+
+
 def run_partition_analysis(experiment: "NimLibp2pExperiment") -> None:
     dump_dir, df = prepare(experiment)
     cfg = experiment.config
@@ -172,8 +242,12 @@ def run_partition_analysis(experiment: "NimLibp2pExperiment") -> None:
 
     split = applied_events[-1]["side_a"]
     per_msg = per_message_reach(publishes, df, split, cfg.num_relay_nodes, applied, heal)
+    pods = pod_names(df[POD_COLUMN].iloc[0], cfg.num_relay_nodes)
     write_table(
         dump_dir,
         "partition_result",
-        partition_table(per_msg, df, applied, heal, cfg.num_relay_nodes),
+        partition_table(per_msg, df, applied, heal, cfg.num_relay_nodes)
+        + mesh_rows(
+            load_mesh_peers(experiment.output_folder), pods[:split], pods[split:], applied, heal
+        ),
     )
