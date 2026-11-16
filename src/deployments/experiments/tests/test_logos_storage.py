@@ -34,7 +34,7 @@ def test_private_network_bootstrap_contract():
 
     assert bootstrap.spec.replicas == 1
     assert nodes.spec.replicas == 2
-    assert "--no-bootstrap-node" in anchor.args
+    assert "--no-bootstrap-node" not in anchor.args
     assert "--no-bootstrap-node" not in node.args
     assert "BOOTSTRAP_NODE_URL" not in {env.name for env in anchor.env}
     env = {env.name: env.value for env in node.env}

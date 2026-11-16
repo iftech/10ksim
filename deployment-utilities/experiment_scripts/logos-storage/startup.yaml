@@ -1,7 +1,7 @@
 experiment: logos-storage
 image:
   repo: "albertodst/logos-storage"
-  tag: "k8s-smoke-9ce0b408"
+  tag: "k8s-smoke-a77ce20d"
 requester_image:
   repo: "albertodst/pod-api-requester"
   tag: "logos-storage-v3"

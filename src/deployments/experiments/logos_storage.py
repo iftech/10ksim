@@ -156,9 +156,9 @@ def build_nodes(
         f"--metrics-port={METRICS_PORT}",
         f"--log-level={config.log_level}",
     ]
-    if bootstrap:
-        args.append("--no-bootstrap-node")
-    else:
+    # Current Storage starts a private bootstrap when no peers are supplied.
+    # --no-bootstrap-node was removed upstream with the network presets.
+    if not bootstrap:
         # The image entrypoint fetches /api/storage/v1/spr and sets STORAGE_BOOTSTRAP_NODE.
         env.extend(
             [
