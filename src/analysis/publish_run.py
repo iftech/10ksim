@@ -13,6 +13,7 @@ from src.analysis.post_run.publish import (
     TOKEN_ENV,
     experiment_body,
     publish,
+    scrape_label,
     unpublishable,
 )
 from src.analysis.utils.log_utils import init_logger
@@ -44,7 +45,8 @@ def main() -> None:
             logger.error(f"`{run.name}` is not published: {reason}")
             failed.append(run.name)
             continue
-        body = experiment_body(exp, run_scrape_config(exp, name=run.name), run.name)
+        config = run_scrape_config(exp, name=run.name)
+        body = experiment_body(exp, config, run.name, scrape_label(run))
         if args.dry_run:
             print(json.dumps(body, indent=2))
             continue
