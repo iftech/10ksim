@@ -15,7 +15,9 @@ from src.analysis.post_run.publish import (
     DASHBOARD_URL,
     SCRAPE_LABEL,
     TIMEOUT_S,
+    UNCHANGED,
     metric_dataset,
+    run_pods,
     run_title,
 )
 
@@ -69,15 +71,33 @@ def _query_response(rows: List[dict]) -> dict:
     return {"data": {"result": [{"metric": m, "values": v} for m, v in series.values()]}}
 
 
+def run_dataset(experiment: dict, name: str, url: str = DASHBOARD_URL) -> List[dict]:
+    """A dataset's rows; a metric under UNCHANGED_RULE is one row per pod at the end of the run."""
+    metadata = experiment["metadata"]
+    unchanged = metadata.get(UNCHANGED, {}).get("metrics", {})
+    if name in unchanged:
+        end, same = metadata["results"]["complete"]["end"], unchanged[name]
+        return [
+            {"timestamp": end, "value": same["value"], "pod": pod, **same["labels"]}
+            for pod in run_pods(metadata["stack"])
+        ]
+    if name not in {d["name"] for d in experiment.get("datasets", [])}:
+        raise LookupError(f"`{experiment['title']}` has no `{name}` dataset")
+    response = requests.get(
+        f"{url}/experiments/{experiment['id']}/datasets/{name}/data", timeout=TIMEOUT_S
+    )
+    if response.status_code == 404:
+        raise LookupError(f"`{experiment['title']}` has no stored `{name}` data")
+    response.raise_for_status()
+    return response.json()["data"]
+
+
 def fetch_run_metrics(
     run_name: str, dump: Path, url: str = DASHBOARD_URL, title: Optional[str] = None
 ) -> Path:
     """Write the run's stored datasets to `dump` with the scraper's own CSV writer."""
     experiment = find_experiment(run_name, url, title)
     queries = {d["name"]: d["query"] for d in experiment.get("datasets", [])}
-    response = requests.get(f"{url}/experiments/{experiment['id']}/datasets", timeout=TIMEOUT_S)
-    response.raise_for_status()
-    stored = {d["name"]: d["data"] for d in response.json()["datasets"]}
 
     partial = dump.with_name(f"{dump.name}.partial")
     shutil.rmtree(partial, ignore_errors=True)
@@ -91,9 +111,10 @@ def fetch_run_metrics(
         query, current = queries[name], metric_dataset(metric, config)["query"]
         if (query.get("expr"), query.get("step")) != (current["expr"], current["step"]):
             raise ValueError(f"`{run_name}` stored {name} as {query}, not as today's {current}")
-        if not stored.get(name):
+        rows = run_dataset(experiment, name, url)
+        if not rows:
             raise LookupError(f"`{run_name}` has no stored rows for {name}")
-        handler = DataRequestHandler(_query_response(stored[name]))
+        handler = DataRequestHandler(_query_response(rows))
         handler.create_dataframe_from_request(
             metric.extract_field, metric.container, metric.metrics_path
         )

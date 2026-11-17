@@ -33,6 +33,8 @@ VM_RESPONSE = {
 
 
 class _Response:
+    status_code = 200
+
     def __init__(self, body):
         self._body = body
 
@@ -76,9 +78,10 @@ def _published(monkeypatch, run, query=None, empty=()):
     def get(url, **kwargs):
         if url.endswith("/experiments"):
             return _Response(experiments)
-        assert url.endswith("/experiments/e1/datasets"), url
         rows = {STREAMS: _stored_rows(VM_RESPONSE)} | dict.fromkeys(empty, [])
-        return _Response({"datasets": [{"name": n, "data": r} for n, r in rows.items()]})
+        name = url.removeprefix("http://dash/experiments/e1/datasets/").removesuffix("/data")
+        assert name in rows, url
+        return _Response({"data": rows[name]})
 
     monkeypatch.setattr(fetch.requests, "get", get)
 
