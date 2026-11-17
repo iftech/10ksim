@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from src.analysis.data.data_file_handler import DataPath
+from src.analysis.metrics.config import ScrapeConfig
 from src.analysis.metrics.libp2p.scrape import Nimlibp2pScrapeBuilder
 from src.analysis.metrics.scrapper import Scrapper
 from src.analysis.plotting.config import DataGroup, PlotConfig
@@ -47,14 +48,23 @@ STANDARD_PLOTS = [
 """Templates: `name` is the figure's file stem, the run fills in groups and output path."""
 
 
+def run_scrape_config(
+    exp: dict, dump_location: Optional[Path] = None, name: Optional[str] = None
+) -> ScrapeConfig:
+    """The standard metrics over one run's stable window."""
+    builder = Nimlibp2pScrapeBuilder().with_exp(exp, extract_name=name is None)
+    if name is not None:
+        builder.name = name
+    if dump_location is not None:
+        builder.with_dump_location(str(dump_location))
+    return builder.with_libp2p_metrics().build()
+
+
 def scrape_run_metrics(
     exp: dict, dump_location: Path, kube_config: Optional[str] = None, name: Optional[str] = None
 ) -> Path:
     """Dump the per-metric CSVs for one run's stable window."""
-    builder = Nimlibp2pScrapeBuilder().with_exp(exp, extract_name=name is None)
-    if name is not None:
-        builder.name = name
-    config = builder.with_dump_location(str(dump_location)).with_libp2p_metrics().build()
+    config = run_scrape_config(exp, dump_location, name)
     logger.info(f"Scraping `{config.name}` metrics: {config.start} -> {config.end}")
     Scrapper(kube_config, config).query_and_dump_metrics()
     return dump_location
