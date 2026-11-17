@@ -1,3 +1,4 @@
+# Not in Fleet; applied by hand. Needs the dst-mongo-dev-root-credentials Secret (keys username, password).
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -75,7 +76,7 @@ metadata:
   name: mongodb-dev
   namespace: dst-dashboard
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: mongodb-dev
   ports:
