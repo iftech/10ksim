@@ -134,4 +134,4 @@ def _scrape_and_plot(experiment: "NimLibp2pExperiment") -> None:
         experiment.output_folder / "plots",
         xlabel=f"{experiment.namespace}, {experiment.config.num_relay_nodes} nodes",
     )
-    publish_run_metrics(exp, experiment.output_folder.name)
+    publish_run_metrics(exp, experiment.output_folder)

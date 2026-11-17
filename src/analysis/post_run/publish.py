@@ -3,6 +3,7 @@
 import logging
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List, Optional
 
 import requests
@@ -16,6 +17,8 @@ DASHBOARD_URL = "https://api.dashboard.lab.vac.dev"
 TOKEN_ENV = "DST_DASHBOARD_TOKEN"
 DATASOURCE = "victoria-metrics"
 TIMEOUT_S = 600
+# The name the run's scraped CSVs share, kept so a fetch writes the same files.
+SCRAPE_LABEL = "scrape_label"
 
 
 class PublishError(Exception):
@@ -26,7 +29,7 @@ def _utc(dt: datetime) -> str:
     return (dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt).isoformat()
 
 
-def _dataset(metric: MetricToScrape, config: ScrapeConfig) -> dict:
+def metric_dataset(metric: MetricToScrape, config: ScrapeConfig) -> dict:
     labels = metric.extract_field.split("-")
     labels += [label for label in ("container", "metrics_path") if getattr(metric, label)]
     return {
@@ -42,16 +45,29 @@ def _dataset(metric: MetricToScrape, config: ScrapeConfig) -> dict:
     }
 
 
-def experiment_body(exp: dict, config: ScrapeConfig, run_name: str) -> dict:
+def run_title(run_name: str, config: ScrapeConfig) -> str:
+    return f"{run_name} {config.start:%Y-%m-%d %H:%M}"
+
+
+def scrape_label(run: Path) -> Optional[str]:
+    """The name the run's scraped CSVs share (`metrics/<metric>/<label>.csv`), if one."""
+    labels = {path.stem for path in (run / "metrics").glob("*/*.csv")}
+    return labels.pop() if len(labels) == 1 else None
+
+
+def experiment_body(
+    exp: dict, config: ScrapeConfig, run_name: str, label: Optional[str] = None
+) -> dict:
     """One dataset per scraped metric, over the same window and step as the local CSVs."""
     return {
-        "title": f"{run_name} {config.start:%Y-%m-%d %H:%M}",
+        "title": run_title(run_name, config),
         "family": exp["experiment"]["name"],
         "date": f"{config.start:%Y-%m-%d}",
         "docker_image": exp.get("params", {}).get("image"),
         "metadata": {"run": run_name, "experiment": exp["experiment"]["name"]}
-        | {key: exp[key] for key in ("params", "code", "stack", "results") if key in exp},
-        "datasets": [_dataset(metric, config) for metric in config.metrics_to_scrape],
+        | {key: exp[key] for key in ("params", "code", "stack", "results") if key in exp}
+        | ({SCRAPE_LABEL: label} if label else {}),
+        "datasets": [metric_dataset(metric, config) for metric in config.metrics_to_scrape],
         "panels": [],
         "publish": False,
     }
@@ -105,18 +121,19 @@ def unpublishable(exp: dict) -> Optional[str]:
     return None
 
 
-def publish_run_metrics(exp: dict, run_name: str) -> Optional[str]:
+def publish_run_metrics(exp: dict, run: Path) -> Optional[str]:
     """Publish what `scrape_run_metrics` scraped for this run. Logs failures, never raises."""
     reason = unpublishable(exp)
     if reason:
-        logger.warning(f"`{run_name}` is not on the dashboard: {reason}")
+        logger.warning(f"`{run.name}` is not on the dashboard: {reason}")
         return None
     token = os.environ.get(TOKEN_ENV)
     if not token:
-        logger.warning(f"{TOKEN_ENV} is not set; `{run_name}` is not on the dashboard")
+        logger.warning(f"{TOKEN_ENV} is not set; `{run.name}` is not on the dashboard")
         return None
     try:
-        return publish(experiment_body(exp, run_scrape_config(exp, name=run_name), run_name), token)
+        config = run_scrape_config(exp, name=run.name)
+        return publish(experiment_body(exp, config, run.name, scrape_label(run)), token)
     except Exception:
-        logger.exception(f"Publishing `{run_name}` to the dashboard failed")
+        logger.exception(f"Publishing `{run.name}` to the dashboard failed")
         return None

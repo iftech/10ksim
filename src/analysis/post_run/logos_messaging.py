@@ -400,7 +400,7 @@ def scrape_and_plot(experiment: "LogosMessagingExperiment") -> None:
     label = f"{experiment.config.num_relay_nodes} nodes"
     dump = scrape_run_metrics(experiment.metadata, out / "metrics", name=label)
     plot_run_metrics({label: dump}, out / "plots", xlabel=experiment.namespace)
-    publish_run_metrics(experiment.metadata, out.name)
+    publish_run_metrics(experiment.metadata, out)
 
 
 def _safe(label: str, query, default):

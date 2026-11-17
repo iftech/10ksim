@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from src.analysis.post_run import publish as publish_module
@@ -84,6 +86,6 @@ def test_only_runs_from_clean_pushed_code_are_published(monkeypatch, code, publi
     monkeypatch.setenv(publish_module.TOKEN_ENV, "t")
     monkeypatch.setattr(publish_module, "publish", lambda body, token: posted.append(body))
 
-    publish_module.publish_run_metrics({**EXP, "code": code}, "run")
+    publish_module.publish_run_metrics({**EXP, "code": code}, Path("run"))
 
     assert bool(posted) is published
