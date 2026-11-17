@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from dst_dashboard.api.experiments import missing_datasets, retry_detail
 from dst_dashboard.auth import create_admin_token, require_admin_token
 from dst_dashboard.config.constants import VICTORIA_RETENTION
 from dst_dashboard.config.data_structures import ExperimentConfig
@@ -120,6 +121,9 @@ def reprocess_experiment(
         # Process the experiment (this will fetch datasets and transform panels).
         # process_experiment always returns the experiment ID or raises an exception on failure.
         processor.process_experiment(experiment)
+        missing = missing_datasets(db, experiment)
+        if missing:
+            raise HTTPException(status_code=502, detail=retry_detail(experiment_id, missing))
 
         return {
             "status": "success",

@@ -3,7 +3,7 @@ from datetime import timedelta
 from enum import StrEnum
 from pathlib import Path
 
-# VictoriaLogs and VictoriaMetrics keep 6 months (retentionPeriod=6).
+# Under the lab's VictoriaLogs/VictoriaMetrics retention: retentionPeriod=6 months of 31 days.
 VICTORIA_RETENTION = timedelta(days=180)
 
 DEFAULT_CONFIG_PATH = Path.home() / ".cache" / "dst_dashboard" / "config.yaml"

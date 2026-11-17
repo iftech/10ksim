@@ -20,8 +20,6 @@ from src.analysis.metrics import scrape_utils
 
 logger = logging.getLogger(__name__)
 
-VM_QUERY_TIMEOUT_S = 120
-
 _victorialogs_log_init_lock = threading.Lock()
 _victorialogs_log_initialized = False
 
@@ -326,12 +324,14 @@ class DatasetProcessor:
             dataset_config.timeRange.end,
             step_value,
         )
+        # Stored rows are final, so a partial answer must fail instead.
+        promql_url += "&deny_partial_response=1"
 
         logger.debug(f"Prometheus query URL: {promql_url}")
 
         try:
             # Execute query
-            result = scrape_utils.get_query_data(promql_url, timeout=VM_QUERY_TIMEOUT_S)
+            result = scrape_utils.get_query_data(promql_url)
 
             match result:
                 case Ok(data):

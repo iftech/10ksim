@@ -5,7 +5,12 @@ import pytest
 from fastapi import HTTPException
 
 from dst_dashboard.api import admin, experiments
-from dst_dashboard.config.data_structures import ExperimentConfig
+from dst_dashboard.config.data_structures import (
+    DashboardFullConfig,
+    DatasetConfig,
+    ExperimentConfig,
+)
+from dst_dashboard.processors.experiment_processor import ExperimentProcessor
 
 
 def _experiment(start: datetime) -> dict:
@@ -65,3 +70,39 @@ def test_a_dataset_past_retention_is_not_cleared(monkeypatch, age_days, cleared)
             admin.clear_dataset("e1", "full")
         assert error.value.status_code == 409
         db.delete_dataset.assert_not_called()
+
+
+@pytest.mark.parametrize("fetched", [[], TimeoutError("timed out")])
+def test_a_fetch_with_no_rows_is_left_unstored_for_the_next_reprocess(monkeypatch, fetched):
+    db = MagicMock()
+    db.get_dataset.return_value = None
+    processor = ExperimentProcessor(DashboardFullConfig(datasources=[]), db)
+
+    def fetch(*args):
+        if isinstance(fetched, Exception):
+            raise fetched
+        return fetched
+
+    monkeypatch.setattr(processor, "fetch_dataset", fetch)
+    dataset = DatasetConfig(**_experiment(datetime(2026, 9, 16, 10, 10))["datasets"][0])
+
+    assert processor.process_dataset("e1", dataset) is False
+    db.store_dataset.assert_not_called()
+
+
+@pytest.mark.parametrize("rows", [5, 0])
+def test_a_reprocess_that_leaves_a_dataset_empty_fails(monkeypatch, rows):
+    db = MagicMock()
+    db.get_experiment.return_value = _experiment(datetime(2026, 9, 16, 10, 10))
+    db.get_dataset_metadata.side_effect = lambda _, name: {
+        "row_count": rows if name == "empty" else 5
+    }
+    monkeypatch.setattr(admin, "DSTDatabase", lambda: db)
+    monkeypatch.setattr(admin, "ExperimentProcessor", lambda config, db: MagicMock())
+
+    if rows:
+        assert admin.reprocess_experiment("e1", request=MagicMock())["status"] == "success"
+        return
+    with pytest.raises(HTTPException) as error:
+        admin.reprocess_experiment("e1", request=MagicMock())
+    assert error.value.status_code == 502 and "'empty'" in error.value.detail
