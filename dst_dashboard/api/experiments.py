@@ -11,6 +11,22 @@ from dst_dashboard.storage.db import DSTDatabase
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
 
+def missing_datasets(db: DSTDatabase, experiment: ExperimentConfig) -> List[str]:
+    """Datasets of `experiment` with no stored rows."""
+    return [
+        d.name
+        for d in experiment.datasets
+        if not (db.get_dataset_metadata(experiment.id, d.name) or {}).get("row_count")
+    ]
+
+
+def retry_detail(experiment_id: str, missing: List[str]) -> str:
+    return (
+        f"No rows fetched for datasets {missing}; "
+        f"POST /admin/experiments/{experiment_id}/reprocess fetches them again"
+    )
+
+
 @router.get("/families")
 def list_families(request: Request) -> Dict[str, Any]:
     """
@@ -117,15 +133,16 @@ def create_experiment(
 
     # Process the experiment (fetch datasets, generate panels)
     processor = get_processor(request)
-    success = processor.process_experiment(experiment)
-
-    if not success:
-        # Rollback - delete from DB if processing failed
+    try:
+        processor.process_experiment(experiment)
+        empty = missing_datasets(db, experiment)
+        if empty:
+            raise HTTPException(
+                status_code=502, detail=f"No rows fetched for datasets {empty}; nothing was stored"
+            )
+    except Exception:
         db.delete_experiment(experiment.id)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to process experiment. Check that all datasets and datasources are valid.",
-        )
+        raise
 
     return experiment
 
@@ -180,16 +197,10 @@ def update_experiment(
 
     # Reprocess if configuration changed
     if needs_reprocessing:
-        processor = get_processor(request)
-        success = processor.process_experiment(experiment)
-
-        if not success:
-            # Rollback - restore old experiment
-            db.store_experiment(existing.model_dump())
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to reprocess experiment. Rolled back to previous configuration.",
-            )
+        get_processor(request).process_experiment(experiment)
+        missing = missing_datasets(db, experiment)
+        if missing:
+            raise HTTPException(status_code=502, detail=retry_detail(experiment_id, missing))
 
     return experiment
 

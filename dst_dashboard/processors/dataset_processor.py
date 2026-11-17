@@ -324,6 +324,8 @@ class DatasetProcessor:
             dataset_config.timeRange.end,
             step_value,
         )
+        # Stored rows are final, so a partial answer must fail instead.
+        promql_url += "&deny_partial_response=1"
 
         logger.debug(f"Prometheus query URL: {promql_url}")
 

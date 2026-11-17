@@ -55,16 +55,12 @@ class ExperimentProcessor(PanelProcessor):
                 self.db.store_dataset(experiment_id, dataset_config.name, data)
                 logger.info(f"Stored {len(data)} rows for dataset '{dataset_config.name}'")
                 return True
-            else:
-                logger.warning(f"No data fetched for dataset '{dataset_config.name}'")
-                # Store empty dataset to mark it as attempted
-                self.db.store_dataset(experiment_id, dataset_config.name, [])
-                return False
+            # Left unstored, so the next reprocess fetches it again.
+            logger.warning(f"No data fetched for dataset '{dataset_config.name}'")
+            return False
 
         except Exception as e:
             logger.error(f"Failed to fetch dataset '{dataset_config.name}': {e}")
-            # Store empty dataset to mark it as processed but failed
-            self.db.store_dataset(experiment_id, dataset_config.name, [])
             return False
 
     def process_experiment_datasets(

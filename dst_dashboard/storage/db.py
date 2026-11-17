@@ -199,13 +199,6 @@ class DSTDatabase:
         panel_id = f"{experiment_id}:{panel_name}"
         return self._delete_gridfs_file(self.panel_fs, panel_id)
 
-    def clear_all_dataset_cache(self) -> int:
-        """Delete all cached dataset data across every experiment. Returns count removed."""
-        count = self.db["datasets.files"].count_documents({})
-        self.db["datasets.chunks"].delete_many({})
-        self.db["datasets.files"].delete_many({})
-        return count
-
     @staticmethod
     def _delete_gridfs_file(bucket: GridFSBucket, filename: str) -> bool:
         """Delete a GridFS file by filename. Returns True if a file was found and deleted."""
