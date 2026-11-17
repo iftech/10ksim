@@ -1,3 +1,4 @@
+# Not in Fleet; applied by hand. Needs the dst-mongo-dev-root-credentials Secret (keys username, password).
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

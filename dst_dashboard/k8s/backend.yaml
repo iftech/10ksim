@@ -1,4 +1,4 @@
-# Prod is deployed by Fleet from iftech/vaclab-2 (fleet/dst-dashboard); keep this copy in sync.
+# Prod is deployed by Fleet from iftech/vaclab-2 (fleet/dst-dashboard, branch mamoutou/system_workload_migration); keep this copy in sync.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -34,6 +34,7 @@ spec:
     metadata:
       labels:
         app: dst-dashboard-backend
+        app.kubernetes.io/name: dst-dashboard-backend
     spec:
       affinity:
         nodeAffinity:
