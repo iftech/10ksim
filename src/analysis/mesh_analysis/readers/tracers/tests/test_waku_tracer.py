@@ -123,3 +123,46 @@ def test_received_regex_matches_json():
     assert received_df.loc[0, "sender_peer_id"] == "16U*74x9yd"
     assert received_df.loc[0, "timestamp"] == pd.Timestamp(1784214600145432320, unit="ns")
     assert pd.api.types.is_datetime64_ns_dtype(received_df["timestamp"])
+
+
+def test_lightpush_handled_regex_matches_current_node():
+    tracer = WakuTracer().with_lightpush_handled_pattern_group()
+
+    line = (
+        "INF 2026-09-15 09:59:56.150+00:00 Handling lightpush request "
+        'topics="waku lightpush" tid=7 file=protocol.nim:61 my_peer_id=16U*PwHZFM '
+        "peer_id=16U*xmNhPk requestId=e6e7357a3dbbd74974d5 pubsubTopic=ok(/waku/2/rs/0/0) "
+        "contentTopic=/my-app/1/dst/proto "
+        "msg_hash=0x0de982ca52bc45de67facf6380ee949a44eb02780f29d651044105841e2278fd "
+        "receivedTime=1789466396152050688"
+    )
+
+    parsed_logs = mock_queries([[line]], tracer)
+    handled_df = tracer.trace(parsed_logs)["lightpush_handled"][0]
+
+    assert handled_df.loc[0, "receiver_peer_id"] == "16U*PwHZFM"
+    assert handled_df.loc[0, "sender_peer_id"] == "16U*xmNhPk"
+    assert (
+        handled_df.loc[0, "msg_hash"]
+        == "0x0de982ca52bc45de67facf6380ee949a44eb02780f29d651044105841e2278fd"
+    )
+    assert handled_df.loc[0, "timestamp"] == pd.Timestamp(1789466396152050688, unit="ns")
+
+
+def test_filter_received_regex_matches_current_node():
+    tracer = WakuTracer().with_filter_received_pattern_group()
+
+    line = (
+        "INF 2026-09-15 09:59:56.205+00:00 Received message push "
+        'topics="waku filter client" tid=7 file=client.nim:197 peerId=16U*PinfnV '
+        "msg_hash=0x0de982ca52bc45de67facf6380ee949a44eb02780f29d651044105841e2278fd "
+        "receivedTime=1789466396206527232 payload=a85f62f99ad9...6f97bfd47615 "
+        "pubsubTopic=/waku/2/rs/0/0 content_topic=/my-app/1/dst/proto conn=16U*PinfnV:6aa914c3"
+    )
+
+    parsed_logs = mock_queries([[line]], tracer)
+    received_df = tracer.trace(parsed_logs)["filter_received"][0]
+
+    assert list(received_df.columns[:3]) == ["sender_peer_id", "msg_hash", "timestamp"]
+    assert received_df.loc[0, "sender_peer_id"] == "16U*PinfnV"
+    assert received_df.loc[0, "timestamp"] == pd.Timestamp(1789466396206527232, unit="ns")

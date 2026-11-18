@@ -119,3 +119,7 @@ class Addrs(_BaseFeature):
     init_container_type = "address"
     env_vars = "addrs"
     source_file = "/etc/addrs/addrs.env"
+
+
+class FilterAddrs(Addrs):
+    command_arg_key = "--filternode"
