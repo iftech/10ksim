@@ -1,4 +1,4 @@
-"""Publish finished runs' metrics to the DST dashboard from their folders."""
+"""Publish finished runs' metrics, logs and specs to the DST dashboard from their folders."""
 
 import argparse
 import json
@@ -7,13 +7,12 @@ import os
 import sys
 from pathlib import Path
 
-from src.analysis.post_run.metrics import run_scrape_config
 from src.analysis.post_run.publish import (
     DASHBOARD_URL,
     TOKEN_ENV,
-    experiment_body,
+    expected_rows,
     publish,
-    scrape_label,
+    run_body,
     unpublishable,
 )
 from src.analysis.utils.log_utils import init_logger
@@ -35,23 +34,17 @@ def main() -> None:
     for arg in args.runs:
         run = Path(arg).resolve()
         exp = json.loads((run / "metadata.json").read_text())
-        # Same rule as the post-run scrape, so the dashboard holds what the CSVs hold.
-        if not exp.get("results", {}).get("stable", {}).get("duration"):
-            logger.error(f"`{run.name}` has no stable window; skipping it")
-            failed.append(run.name)
-            continue
         reason = unpublishable(exp)
         if reason:
             logger.error(f"`{run.name}` is not published: {reason}")
             failed.append(run.name)
             continue
-        config = run_scrape_config(exp, name=run.name)
-        body = experiment_body(exp, config, run.name, scrape_label(run))
-        if args.dry_run:
-            print(json.dumps(body, indent=2))
-            continue
         try:
-            publish(body, token)
+            body = run_body(exp, run)
+            if args.dry_run:
+                print(json.dumps(body, indent=2))
+                continue
+            publish(body, token, expected=expected_rows(body, run))
         except Exception:
             logger.exception(f"Publishing `{run.name}` failed")
             failed.append(run.name)
