@@ -13,7 +13,20 @@ from src.deployments.registry import experiment
 IMAGES = {
     "2.0.0": Image(repo="radiken/dst-test-node-regression", tag="v2.0.0-kad"),
     "2.1.0": Image(repo="radiken/dst-test-node-regression", tag="v2.1.0-kad"),
+    "2.4.0": {
+        "image": Image(repo="mamoutoudiarra/regression-node-amd64", tag="v2.4.0"),
+        "bootstrap_image": Image(repo="mamoutoudiarra/regression-bootstrap-amd64", tag="v2.4.0"),
+    },
+    "2.5.0": {
+        "image": Image(repo="radiken/dst-test-node-regression", tag="v2.5.0"),
+        "bootstrap_image": Image(repo="radiken/dst-test-node-regression-bootstrap", tag="v2.5.0"),
+    },
 }
+
+
+def _image_params(version: str) -> dict:
+    spec = IMAGES[version]
+    return dict(spec) if isinstance(spec, dict) else {"image": spec}
 
 
 def _env_list(name: str, default: str) -> list:
@@ -57,7 +70,7 @@ class MultiNimlibp2pKad(Multiple):
                 for muxer in MUXERS:
                     yield {
                         **base,
-                        "image": IMAGES[version],
+                        **_image_params(version),
                         "version": version,
                         "muxer": muxer,
                         "message_size_bytes": size,
