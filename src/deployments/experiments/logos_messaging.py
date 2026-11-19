@@ -172,7 +172,9 @@ def build_edge_nodes(namespace: str, config: ExpConfig) -> V1Deployable:
 
 def build_store_nodes(namespace: str, config: ExpConfig) -> V1Deployable:
     """Relays without the Messaging API that archive every message in a Postgres sidecar."""
-    args = {"--max-connections": config.store_max_connections} if config.store_max_connections else {}
+    args = (
+        {"--max-connections": config.store_max_connections} if config.store_max_connections else {}
+    )
     builder = node_builder("store-0", config.num_store_nodes, namespace, config, args).with_store()
     builder.config.namespace = namespace
     return builder.with_binary(LOGOS_DELIVERY_BINARY).with_image(config.image).build()
