@@ -2,7 +2,7 @@ from datetime import timedelta
 
 import pandas as pd
 
-from src.analysis.post_run.partition import partition_table, per_message_reach
+from src.analysis.post_run.partition import mesh_rows, partition_table, per_message_reach
 from src.analysis.post_run.tests.conftest import T0
 
 CUT = T0 + timedelta(seconds=50)
@@ -100,3 +100,75 @@ def test_counts_each_node_once(deliveries, fanout):
     assert rows["delivery under the split, own half"].startswith(
         "0 of 1 messages reached their whole half"
     )
+
+
+SIDE_A, SIDE_B = ["pod-0", "pod-1"], ["pod-2", "pod-3"]
+
+
+def mesh(snapshots):
+    """{seconds_after_T0: [degree of pod-0..pod-3]}, as the scraped mesh-peers frame."""
+    return pd.DataFrame(
+        list(snapshots.values()),
+        index=pd.to_datetime([T0 + timedelta(seconds=s) for s in snapshots]),
+        columns=SIDE_A + SIDE_B,
+    )
+
+
+def mesh_table(snapshots):
+    return dict(
+        (item, result) for item, _, result in mesh_rows(snapshots, SIDE_A, SIDE_B, CUT, HEAL)
+    )
+
+
+def test_mesh_reaction_is_bracketed_by_the_snapshots_around_it():
+    """Side a still reports 6 ten seconds into the cut and 3 thirty seconds in; side b never moves."""
+    rows = mesh_table(mesh({40: [6, 6, 6, 6], 60: [6, 6, 6, 6], 80: [3, 3, 6, 6]}))
+    assert rows["mesh reaction to the cut"] == (
+        "side a: 6.0 to 3.0 between 10s and 30s after the cut; "
+        "side b: held at 6.0 for the 30s observed"
+    )
+
+
+def test_mesh_reaction_in_the_first_snapshot_starts_at_the_cut():
+    rows = mesh_table(mesh({40: [6, 6, 6, 6], 60: [2, 2, 2, 2]}))
+    assert rows["mesh reaction to the cut"].startswith(
+        "side a: 6.0 to 2.0 between 0s and 10s after the cut"
+    )
+
+
+def test_mesh_reaction_ignores_a_move_smaller_than_a_tenth():
+    rows = mesh_table(mesh({40: [6, 6, 6, 6], 60: [6, 5, 6, 6]}))
+    assert rows["mesh reaction to the cut"].startswith("side a: held at 6.0 for the 10s observed")
+
+
+def test_mesh_reaction_ignores_what_happens_after_the_heal():
+    rows = mesh_table(mesh({40: [6, 6, 6, 6], 60: [6, 6, 6, 6], 130: [9, 9, 9, 9]}))
+    assert rows["mesh reaction to the cut"].startswith("side a: held at 6.0 for the 10s observed")
+
+
+def test_mesh_reaction_says_which_snapshot_is_missing():
+    assert mesh_table(mesh({60: [6, 6, 6, 6]}))["mesh reaction to the cut"].startswith(
+        "side a: no snapshot before the cut"
+    )
+    assert mesh_table(mesh({40: [6, 6, 6, 6], 130: [6, 6, 6, 6]}))[
+        "mesh reaction to the cut"
+    ].startswith("side a: no snapshot under the split")
+
+
+def test_mesh_degree_is_reported_per_half_under_the_split_and_whole_after_it():
+    rows = mesh_table(mesh({40: [6, 6, 6, 6], 80: [3, 5, 7, 9], 130: [4, 6, 6, 8]}))
+    assert rows["mesh peers under the split, side a"] == "median 4, range 3 to 5"
+    assert rows["mesh peers under the split, side b"] == "median 8, range 7 to 9"
+    assert rows["mesh peers after the heal"] == "median 6, range 4 to 8"
+
+
+def test_mesh_rows_say_when_the_run_has_no_metrics():
+    rows = mesh_table(None)
+    assert set(rows.values()) == {"no mesh-peers metrics in the run folder"}
+    assert len(rows) == 4
+
+
+def test_mesh_degree_says_when_a_phase_has_no_snapshot():
+    rows = mesh_table(mesh({40: [6, 6, 6, 6]}))
+    assert rows["mesh peers under the split, side a"] == "no snapshot under the split"
+    assert rows["mesh peers after the heal"] == "no snapshot after the heal"
