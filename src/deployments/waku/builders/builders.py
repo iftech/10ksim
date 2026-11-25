@@ -60,7 +60,9 @@ class WakuStatefulSetBuilder(StatefulSetBuilder):
         return self
 
     def with_store(self) -> Self:
-        Store.apply_stateful_set_config(self.config)
+        if not self.config.name:
+            raise ValueError(f"Must configure node first. Config: `{self.config}`")
+        Store.apply_stateful_set_config(self.config, self.config.namespace)
         return self
 
     def with_nice_command(self, increment: int) -> Self:

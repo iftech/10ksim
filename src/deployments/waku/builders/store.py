@@ -31,9 +31,9 @@ def apply_container_config(config: ContainerConfig):
     apply_command_config(config.command_config)
 
 
-def apply_pod_spec_config(config: PodSpecConfig):
+def apply_pod_spec_config(config: PodSpecConfig, namespace: str):
     config.with_volume(V1Volume(name="postgres-data", empty_dir={}))
-    config.with_dns_search("zerotesting-store.zerotesting.svc.cluster.local")  # TODO: namespace
+    config.with_dns_search(f"zerotesting-store.{namespace}.svc.cluster.local")
     config.add_container(postgress_container(), order="prepend")
     waku_container = find_waku_container_config(config)
     if waku_container is None:
@@ -43,21 +43,20 @@ def apply_pod_spec_config(config: PodSpecConfig):
     apply_container_config(waku_container)
 
 
-def apply_pod_template_spec_config(config: PodTemplateSpecConfig):
+def apply_pod_template_spec_config(config: PodTemplateSpecConfig, namespace: str):
     config.with_app("zerotenkay-store")
-    apply_pod_spec_config(config.pod_spec_config)
+    apply_pod_spec_config(config.pod_spec_config, namespace)
 
 
-def apply_stateful_set_spec_config(config: StatefulSetSpecConfig):
+def apply_stateful_set_spec_config(config: StatefulSetSpecConfig, namespace: str):
     config.with_app("zerotenkay-store")
     config.service_name = "zerotesting-store"
-    apply_pod_template_spec_config(config.pod_template_spec_config)
+    apply_pod_template_spec_config(config.pod_template_spec_config, namespace)
 
 
-def apply_stateful_set_config(config: StatefulSetConfig):
+def apply_stateful_set_config(config: StatefulSetConfig, namespace: str):
     config.name = "store-0"  # TODO: should be store-{shard}
-    config.namespace = "zerotesting"  # TODO: overwrite flag: raise, overwrite, ignore
-    apply_stateful_set_spec_config(config.stateful_set_spec)
+    apply_stateful_set_spec_config(config.stateful_set_spec, namespace)
 
 
 def postgress_container() -> dict:
