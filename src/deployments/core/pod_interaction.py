@@ -55,8 +55,10 @@ def _exec_ws_client(
     stdin: bool = False,
     tty: bool = False,
     timeout: Optional[int] = None,
+    container: Optional[str] = None,
 ) -> WSClient:
     api = client.CoreV1Api()
+    container_kwargs = {"container": container} if container else {}
     try:
         ws_client = stream(
             api.connect_get_namespaced_pod_exec,
@@ -68,6 +70,7 @@ def _exec_ws_client(
             stdout=True,
             tty=tty,
             _preload_content=False,
+            **container_kwargs,
         )
         if timeout:
             ws_client.update(timeout=timeout)
@@ -192,6 +195,7 @@ def exec_command_in_pod(
     stdin: bool = False,
     tty: bool = False,
     timeout: Optional[int] = None,
+    container: Optional[str] = None,
 ) -> PodCommand:
     """
     Execute a command in a Kubernetes pod and return a helper for interaction and output collection.
@@ -202,6 +206,7 @@ def exec_command_in_pod(
     :param stdin: Enable stdin stream (for interactive commands).
     :param tty: Allocate a TTY (required for interactive shells).
     :param timeout: Timeout in seconds for websocket reads and updates.
+    :param container: Container to exec in. Required when the pod has more than one.
     :return: A PodCommand object wrapping the WSClient with methods to collect output and check status.
     :raises kubernetes.client.rest.ApiException: If the command failed to start in the pod.
     """
@@ -215,5 +220,6 @@ def exec_command_in_pod(
         stdin=stdin,
         tty=tty,
         timeout=timeout,
+        container=container,
     )
     return PodCommand(ws_client=ws_client, wrapped_for_exit_code=True)

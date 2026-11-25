@@ -81,3 +81,25 @@ def test_named_files_for_metric_keeps_legacy_metric_file_paths_without_include_f
     assert [(file.name, file.path) for file in named_files] == [
         ("v1", tmp_path / "v1" / "container-memory")
     ]
+
+
+def test_named_files_for_metric_finds_csv_suffixed_scrapes(tmp_path):
+    run = tmp_path / "run"
+    (run / "container-recv").mkdir(parents=True)
+    (run / "container-recv" / "fserver-0.csv").touch()
+    (run / "container-recv" / "fclient-0.csv").touch()
+
+    plot_config = PlotConfig(name="bandwidth", include_files=["fserver-0", "fclient-0"])
+    named_files = MetricsPlotter(configs=[plot_config])._named_files_for_metric(
+        plot_config,
+        [
+            DataPath(name="filter server", path=run, file_name="fserver-0"),
+            DataPath(name="filter client", path=run, file_name="fclient-0"),
+        ],
+        "container-recv",
+    )
+
+    assert [(file.name, file.path) for file in named_files] == [
+        ("filter server", run / "container-recv" / "fserver-0.csv"),
+        ("filter client", run / "container-recv" / "fclient-0.csv"),
+    ]

@@ -2,11 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.analysis.plotting.latency_plotter import (
-    latency_percentiles,
-    latency_table,
-    load_delays,
-)
+from src.analysis.plotting.latency_plotter import latency_percentiles, latency_table, load_delays
 
 
 def _write_received(run: Path, delays, pods=None) -> Path:
@@ -62,3 +58,29 @@ class TestPercentiles:
         assert list(table.columns) == ["v2.1.0", "v2.2.0"]
         assert table.loc["p50", "v2.1.0"] == 2.0
         assert table.loc["p50", "v2.2.0"] == 200.0
+
+
+class TestBoxPlot:
+    def test_writes_one_box_per_run(self, tmp_path):
+        from src.analysis.plotting.latency_plotter import LatencyPlotConfig, LatencyPlotter
+
+        fast = _write_received(tmp_path / "fast", [1, 2, 3, 400])
+        slow = _write_received(tmp_path / "slow", [10, 20, 30])
+        config = LatencyPlotConfig(
+            name="box", kind="box", runs={"fast": fast, "slow": slow}, out_dir=tmp_path
+        )
+
+        out = LatencyPlotter(configs=[config])._create_plot(config)
+
+        assert out == tmp_path / "box.jpg"
+        assert out.exists()
+
+    def test_no_data_writes_nothing(self, tmp_path):
+        from src.analysis.plotting.latency_plotter import LatencyPlotConfig, LatencyPlotter
+
+        config = LatencyPlotConfig(
+            name="box", kind="box", runs={"none": tmp_path / "nope"}, out_dir=tmp_path
+        )
+
+        assert LatencyPlotter(configs=[config])._create_plot(config) is None
+        assert not (tmp_path / "box.jpg").exists()

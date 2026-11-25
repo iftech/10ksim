@@ -38,10 +38,11 @@ def test_addrs_declares_every_volume_it_mounts():
 def test_with_store_builds():
     stateful_set = (
         WakuStatefulSetBuilder()
-        .with_waku_config(name="store-0", namespace="zerotesting", num_nodes=1)
+        .with_waku_config(name="store-0", namespace="other-namespace", num_nodes=1)
         .with_store()
         .build()
     )
 
+    assert stateful_set.metadata.namespace == "other-namespace"
     searches = stateful_set.spec.template.spec.dns_config.searches
-    assert "zerotesting-store.zerotesting.svc.cluster.local" in searches
+    assert "zerotesting-store.other-namespace.svc.cluster.local" in searches
