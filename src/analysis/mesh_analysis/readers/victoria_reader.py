@@ -6,7 +6,6 @@ from typing import Dict, Iterator, List, Optional, Tuple
 
 import pandas as pd
 import requests
-from httpx import Response
 from result import Err, Ok, Result
 
 # Project Imports
@@ -97,7 +96,7 @@ class VictoriaReader(Reader):
 
         return dfs
 
-    def single_query_info(self) -> Result[Dict, Response]:
+    def single_query_info(self) -> Result[Dict, requests.Response]:
         response = requests.post(**self._config_query)
         if response.status_code != 200:
             logger.error(f"Request failed with status code: {response.status_code}")
