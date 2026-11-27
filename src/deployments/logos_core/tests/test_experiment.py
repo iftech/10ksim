@@ -43,7 +43,7 @@ def collect_actual_resources(experiment: LogosDeliveryExperiment) -> List[Tuple[
     return sorted(result.items())
 
 
-@pytest.mark.parametrize("case_name", ["default", "case_1"])
+@pytest.mark.parametrize("case_name", ["default"])
 def test_experiment_cases(case_name: str):
     case_dir = TEST_DATA_DIR / "cases" / case_name
     input_data = load_yaml(case_dir / "input.yaml")

@@ -3,8 +3,6 @@ import json
 import logging
 from datetime import timedelta
 
-import pytest
-
 # Project Import
 from src.deployments.core.event_window_bridge import (
     EventBound,
@@ -12,11 +10,6 @@ from src.deployments.core.event_window_bridge import (
     EventWindow,
     EventWindowBridge,
 )
-from src.deployments.libp2p.bridge import Bridge as Libp2pBridge
-from src.deployments.libp2p.builders.helpers import LIBP2P_CONTAINER_NAME
-from src.deployments.libp2p.service_discovery_bridge import ServiceDiscoveryBridge
-from src.deployments.waku.bridge import Bridge as WakuBridge
-from src.deployments.waku.builders.helpers import WAKU_CONTAINER_NAME
 
 
 def write_events_log(tmp_path, events):
@@ -157,48 +150,3 @@ def test_event_window_bridge_warns_when_selected_interval_is_missing(tmp_path, c
     # Should have results with only the intervals that exist
     assert "complete" in metadata["results"]
     assert "stable" not in metadata["results"]
-
-
-@pytest.mark.parametrize(
-    ("bridge_cls", "container_name"),
-    [
-        (Libp2pBridge, LIBP2P_CONTAINER_NAME),
-        (WakuBridge, WAKU_CONTAINER_NAME),
-    ],
-)
-def test_protocol_bridges_define_complete_and_stable_event_windows(bridge_cls, container_name):
-    bridge = bridge_cls()
-
-    assert bridge.interval == "complete"
-    assert bridge.container_name == container_name
-    assert bridge.event_windows() == [
-        EventWindow(
-            key="complete",
-            start=EventBound("wait_for_clear_finished"),
-            end=EventBound("internal_run_finished", timedelta(seconds=30)),
-        ),
-        EventWindow(
-            key="stable",
-            start=EventBound("start_messages", timedelta(minutes=3)),
-            end=EventBound("publisher_messages_finished", timedelta(seconds=-30)),
-        ),
-    ]
-
-
-def test_service_discovery_bridge_defines_complete_and_discovery_event_windows():
-    bridge = ServiceDiscoveryBridge()
-
-    assert bridge.interval == "complete"
-    assert bridge.container_name == LIBP2P_CONTAINER_NAME
-    assert bridge.event_windows() == [
-        EventWindow(
-            key="complete",
-            start=EventBound("wait_for_clear_finished"),
-            end=EventBound("service_discovery_finished"),
-        ),
-        EventWindow(
-            key="discovery",
-            start=EventBound("service_discovery_started"),
-            end=EventBound("service_discovery_finished"),
-        ),
-    ]

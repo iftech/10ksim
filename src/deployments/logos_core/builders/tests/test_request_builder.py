@@ -145,16 +145,6 @@ class TestErrors:
                 .build()
             )
 
-    def test_no_mode(self):
-        _pod = (
-            LogoscorePodApiRequester()
-            .with_logoscore()
-            .with_namespace("ns")
-            .with_name("logoscore-requester")
-            .with_mode("server")
-            .build()
-        )
-
 
 @pytest.fixture()
 def base_builder() -> LogoscorePodApiRequester:

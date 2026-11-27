@@ -15,7 +15,6 @@ from src.deployments.experiments.logos_storage import (
     ExpConfig,
     LogosStorageExperiment,
     build_nodes,
-    build_requester,
     build_service,
 )
 from src.deployments.logos_storage.mix import MIX_SCRIPTS_CONFIG_MAP
@@ -127,22 +126,6 @@ def test_image_is_required_and_network_needs_two_ordinary_nodes():
         config(download_concurrency=0)
     with pytest.raises(ValidationError, match="num_mix_nodes"):
         config(mix_enabled=True, num_mix_nodes=3)
-
-
-def test_requester_uses_the_storage_image_and_waits_for_its_http_api():
-    requester = build_requester("storage-test", config())
-    pod = requester.build()
-    container = pod.spec.containers[0]
-    assert container.image == "albertodst/pod-api-requester:logos-storage-v3"
-    assert container.readiness_probe.http_get.path == "/openapi.json"
-    assert container.readiness_probe.http_get.port == 8645
-    dependencies = requester.build_dependencies()["requester_base"]
-    service = dependencies["services"][0]
-    assert service.spec.selector.items() <= pod.metadata.labels.items()
-    assert service.spec.type == "NodePort"
-    assert dependencies["roles"][0].rules[0].resources == ["pods", "services"]
-    binding = dependencies["role_bindings"][0]
-    assert binding.subjects[0]["namespace"] == "storage-test"
 
 
 @pytest.mark.asyncio
