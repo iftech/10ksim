@@ -36,10 +36,6 @@ if __name__ == '__main__':
     log_analyzer.analyze_reliability(n_jobs=4)
     log_analyzer.check_store_messages()
     log_analyzer.check_filter_messages()
-
-    waku_plots.plot_message_distribution(Path('local_data/simulations_data/refactor/summary/received.csv'), 
-                                         'Title', 
-                                         Path('local_data/simulations_data/refactor/plot.png'))
 ```
 
 ## Expand
