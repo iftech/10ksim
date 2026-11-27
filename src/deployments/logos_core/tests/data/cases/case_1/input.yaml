@@ -1,5 +1,0 @@
-num_relay_nodes: 100
-num_messages: 20
-delay_cold_start: 60
-delay_after_publish: 0.25
-num_bootstrap_nodes: 5

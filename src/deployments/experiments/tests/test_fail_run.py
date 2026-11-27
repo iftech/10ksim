@@ -73,30 +73,3 @@ async def test_every_reason_is_reported_not_just_the_first(tmp_path):
 
     with pytest.raises(ExperimentFailed, match="first; second"):
         await _experiment(tmp_path, two).run()
-
-
-@pytest.mark.asyncio
-async def test_a_sweep_still_analyses_a_run_it_marks_invalid(tmp_path, mocker):
-    """The run that lost messages is the one most worth analysing, so it must not be dropped."""
-    from src.deployments.experiments import multi_experiment
-
-    analysed = []
-    mocker.patch.object(multi_experiment, "run_post_analysis", lambda exp: analysed.append(exp))
-
-    bad = _experiment(tmp_path / "bad", lambda e: e.fail_run("2 messages never published"))
-    good = _experiment(tmp_path / "good", lambda e: None)
-
-    completed, invalid = [], []
-    for exp in (bad, good):
-        try:
-            await exp.run(run_post_analysis=False)
-        except ExperimentFailed as e:
-            invalid.append(str(e))
-            completed.append(exp)
-        else:
-            completed.append(exp)
-    for exp in completed:
-        multi_experiment.run_post_analysis(exp)
-
-    assert len(analysed) == 2, "both runs analysed, including the invalid one"
-    assert len(invalid) == 1

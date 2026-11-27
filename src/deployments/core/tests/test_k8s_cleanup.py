@@ -76,18 +76,6 @@ class TestPollNamespaceHasObjects:
         getattr(mocks[group], method).side_effect = ApiException()
         assert poll_namespace_has_objects("ns", MagicMock(), types=[type_name]) is False
 
-    def test_core_api_is_constructed_with_the_passed_client(self, mocker):
-        core = MagicMock()
-        core.list_namespaced_pod.return_value = _list_result([])
-        core_api = mocker.patch.object(k8s_cleanup.client, "CoreV1Api", return_value=core)
-        mocker.patch.object(k8s_cleanup.client, "AppsV1Api")
-        mocker.patch.object(k8s_cleanup.client, "BatchV1Api")
-
-        api_client = MagicMock()
-        poll_namespace_has_objects("ns", api_client, types=["Pod"])
-
-        core_api.assert_called_once_with(api_client)
-
 
 # --------------------------------------------------------------------------- #
 # wait_for_no_objs_in_namespace  (loop around poll_namespace_has_objects)

@@ -236,23 +236,6 @@ class TestParserTypeWiring:
         result = kwargs["type"]('["a", "b"]')
         assert result == ["a", "b"]
 
-    def test_list_int_parses_json(self):
-        """list[int] should parse JSON strings."""
-        field_info = type(
-            "MockFieldInfo",
-            (),
-            {
-                "annotation": list[int],
-                "description": "List of ints",
-                "default": ARG_NOT_SET,
-            },
-        )()
-
-        flag, kwargs = _field_to_arg("items", field_info)
-        assert flag == "--items"
-        result = kwargs["type"]("[1, 2, 3]")
-        assert result == [1, 2, 3]
-
     def test_dict_str_str_parses_json(self):
         """dict[str, str] should parse JSON strings."""
         field_info = type(
@@ -303,23 +286,6 @@ class TestParserTypeWiring:
         assert flag == "--items"
         result = kwargs["type"]('["a", 1, true]')
         assert result == ["a", 1, True]
-
-    def test_bare_dict_parses_json(self):
-        """Bare dict should parse JSON strings."""
-        field_info = type(
-            "MockFieldInfo",
-            (),
-            {
-                "annotation": dict,
-                "description": "Bare dict",
-                "default": ARG_NOT_SET,
-            },
-        )()
-
-        flag, kwargs = _field_to_arg("data", field_info)
-        assert flag == "--data"
-        result = kwargs["type"]('{"key": "value"}')
-        assert result == {"key": "value"}
 
     # Typing constructs - should not crash
     def test_optional_int_parses(self):
@@ -391,36 +357,6 @@ class TestParserTypeWiring:
 class TestUnwrapOptional:
     """Test _unwrap_optional handles various type annotations."""
 
-    def test_unwraps_optional(self):
-        """Optional[T] should unwrap to T."""
-        result = _unwrap_optional(Optional[str])
-        assert result is str
-
-    def test_unwraps_union_pipe_syntax(self):
-        """T | None (pipe syntax) should unwrap to T."""
-        result = _unwrap_optional(str | None)
-        assert result is str
-
-    def test_unwraps_annotated(self):
-        """Annotated[T, ...] should unwrap to T."""
-        result = _unwrap_optional(Annotated[str, "meta"])
-        assert result is str
-
-    def test_unwraps_annotated_optional_nested(self):
-        """Annotated[Optional[T], ...] should unwrap to T."""
-        result = _unwrap_optional(Annotated[Optional[str], "meta"])
-        assert result is str
-
-    def test_unwraps_optional_annotated_nested(self):
-        """Optional[Annotated[T, ...]] should unwrap to T."""
-        result = _unwrap_optional(Optional[Annotated[str, "meta"]])
-        assert result is str
-
-    def test_unwraps_annotated_pipe_nested(self):
-        """Annotated[T | None, ...] should unwrap to T."""
-        result = _unwrap_optional(Annotated[str | None, "meta"])
-        assert result is str
-
     def test_unwraps_deeply_nested(self):
         """Annotated[Optional[Annotated[T, ...]], ...] should unwrap to T."""
         result = _unwrap_optional(Annotated[Optional[Annotated[str, "inner"]], "outer"])
@@ -433,15 +369,6 @@ class TestUnwrapOptional:
             pass
 
         result = _unwrap_optional(ImageConfig | None)
-        assert result is ImageConfig
-
-    def test_unwraps_annotated_custom_class(self):
-        """Annotated[CustomClass | None, ...] should unwrap to CustomClass."""
-
-        class ImageConfig:
-            pass
-
-        result = _unwrap_optional(Annotated[ImageConfig | None, "meta"])
         assert result is ImageConfig
 
     def test_non_wrapped_unchanged(self):

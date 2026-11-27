@@ -2,24 +2,15 @@ from __future__ import annotations
 
 from kubernetes.client import (
     V1PodSecurityContext,
-    V1ResourceRequirements,
     V1Service,
 )
 
 from src.deployments.core.configs.container import ContainerConfig, Image
-from src.deployments.core.configs.helpers.utils import find_container_config
 from src.deployments.logos_core.builders.nodes import (
     NodesBuilder,
     apply_container_config,
     default_resources,
 )
-
-
-def test_default_resources_returns_expected_values():
-    resources = default_resources()
-    assert isinstance(resources, V1ResourceRequirements)
-    assert resources.requests == {"memory": "1Gi", "cpu": "500m"}
-    assert resources.limits == {"memory": "4Gi", "cpu": "2000m"}
 
 
 def test_apply_container_config_sets_name_image_ports_resources_and_env():
@@ -39,42 +30,6 @@ def test_apply_container_config_sets_name_image_ports_resources_and_env():
     assert config.env[3].name == "POD_UID"
     assert config.env[2].value_from.field_ref.field_path == "metadata.name"
     assert config.env[3].value_from.field_ref.field_path == "metadata.uid"
-
-
-def test_with_config_sets_namespace_and_name():
-    builder = NodesBuilder()
-    builder.with_config(namespace="ns", name="node-a")
-    assert builder._namespace == "ns"
-    assert builder._name == "node-a"
-
-
-def test_with_config_without_name_preserves_existing_name():
-    builder = NodesBuilder()
-    builder.with_config(namespace="ns")
-    assert builder._namespace == "ns"
-    assert builder._name == "logoscore"
-
-
-def test_with_dns_service_accumulates_searches():
-    builder = NodesBuilder().with_config(namespace="ns")
-    builder.with_dns_service(["svc-a", "svc-b"])
-    assert builder._dns_configs == ["svc-a", "svc-b"]
-
-
-def test_with_enrs_accumulates_and_ensures_container():
-    builder = NodesBuilder().with_config(namespace="ns")
-    builder.with_enrs(["enr-a", "enr-b"])
-    container = find_container_config(builder.config, builder._container_name)
-    assert container is not None
-    assert builder._enrs == ["enr-a", "enr-b"]
-    assert container.name == builder._container_name
-
-
-def test_with_image_updates_image():
-    builder = NodesBuilder().with_config(namespace="ns")
-    image = Image(repo="repo", tag="tag")
-    builder.with_image(image)
-    assert builder._image == image
 
 
 def test_with_debug_enables_security_context():

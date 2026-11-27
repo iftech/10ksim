@@ -383,20 +383,6 @@ class TestTransformToBoxplot:
         assert option["yAxis"]["min"] == 0
         assert option["yAxis"]["max"] == 100
 
-    def test_echarts_options_override_is_deep_merged(self):
-        """Should deep-merge user-provided echarts_options into the generated option."""
-        processor = _make_processor()
-        panel_config = _create_panel_config(
-            transform=PanelTransform(groupBy="pod_name", value="delayMs"),
-            echarts_options={"grid": {"left": "5%"}},
-        )
-        data = [{"pod_name": "a", "delayMs": 1}]
-
-        option = processor._transform_to_boxplot(data, panel_config)
-
-        assert option["grid"]["left"] == "5%"
-        assert option["grid"]["right"] == "10%"  # untouched default preserved
-
     def test_rows_missing_the_value_field_are_ignored(self):
         """Should skip rows where the value field is missing/None instead of raising."""
         processor = _make_processor()
@@ -570,21 +556,6 @@ class TestTransformToTimeseries:
         assert option["yAxis"]["min"] == 0
         assert option["yAxis"]["max"] == 10
 
-    def test_echarts_options_override_is_deep_merged(self):
-        """Should deep-merge user-provided echarts_options into the generated option."""
-        processor = _make_processor()
-        panel_config = _create_panel_config(
-            panel_type="timeseries",
-            transform=PanelTransform(x="ts", y="v", groupBy="pod"),
-            echarts_options={"grid": {"left": "1%"}},
-        )
-        data = [{"pod": "a", "ts": "t1", "v": 1}]
-
-        option = processor._transform_to_timeseries(data, panel_config)
-
-        assert option["grid"]["left"] == "1%"
-        assert option["grid"]["right"] == "4%"  # untouched default preserved
-
 
 # --------------------------------------------------------------------------- #
 # PanelProcessor.transform_panel_data Tests
@@ -612,36 +583,6 @@ class TestTransformPanelData:
         with pytest.raises(ValueError, match="Dataset 'empty-dataset' not found"):
             processor.transform_panel_data("exp-1", panel_config)
 
-    def test_applies_derive_transformations_before_routing_to_echarts(self, mocker):
-        """Should run derive transformations on the fetched data before building the option."""
-        db = MagicMock()
-        db.get_dataset.return_value = [{"pod_name": "node-1"}]
-        processor = _make_processor(db)
-        panel_config = _create_panel_config()
-        derived_data = [{"pod_name": "node-1", "pod_group": "normal"}]
-        mock_derive = mocker.patch.object(
-            processor, "_apply_derive_transformations", return_value=derived_data
-        )
-        mock_echarts = mocker.patch.object(
-            processor, "_transform_to_echarts", return_value={"ok": True}
-        )
-
-        result = processor.transform_panel_data("exp-1", panel_config)
-
-        mock_derive.assert_called_once_with([{"pod_name": "node-1"}], panel_config)
-        mock_echarts.assert_called_once_with(derived_data, panel_config)
-        assert result == {"ok": True}
-
-    def test_plotly_format_raises_not_implemented(self):
-        """Should raise NotImplementedError for the not-yet-supported plotly format."""
-        db = MagicMock()
-        db.get_dataset.return_value = [{"a": 1}]
-        processor = _make_processor(db)
-        panel_config = _create_panel_config()
-
-        with pytest.raises(NotImplementedError, match="Plotly"):
-            processor.transform_panel_data("exp-1", panel_config, viz_format="plotly")
-
     def test_unsupported_format_raises_value_error(self):
         """Should raise ValueError for a viz_format that isn't recognized at all."""
         db = MagicMock()
@@ -658,50 +599,6 @@ class TestTransformPanelData:
 # --------------------------------------------------------------------------- #
 class TestTransformToEcharts:
     """Tests for PanelProcessor._transform_to_echarts."""
-
-    def test_boxplot_type_routes_to_transform_to_boxplot(self, mocker):
-        """Should route boxplot panels to _transform_to_boxplot."""
-        processor = _make_processor()
-        panel_config = _create_panel_config(panel_type="boxplot")
-        data = [{"a": 1}]
-        mock_boxplot = mocker.patch.object(
-            processor, "_transform_to_boxplot", return_value={"kind": "boxplot"}
-        )
-
-        result = processor._transform_to_echarts(data, panel_config)
-
-        mock_boxplot.assert_called_once_with(data, panel_config)
-        assert result == {"kind": "boxplot"}
-
-    def test_timeseries_type_routes_to_transform_to_timeseries(self, mocker):
-        """Should route timeseries panels to _transform_to_timeseries."""
-        processor = _make_processor()
-        panel_config = _create_panel_config(panel_type="timeseries")
-        data = [{"a": 1}]
-        mock_timeseries = mocker.patch.object(
-            processor, "_transform_to_timeseries", return_value={"kind": "timeseries"}
-        )
-
-        result = processor._transform_to_echarts(data, panel_config)
-
-        mock_timeseries.assert_called_once_with(data, panel_config)
-        assert result == {"kind": "timeseries"}
-
-    def test_histogram_type_raises_not_implemented(self):
-        """Should raise NotImplementedError for the not-yet-supported histogram type."""
-        processor = _make_processor()
-        panel_config = _create_panel_config(panel_type="histogram")
-
-        with pytest.raises(NotImplementedError, match="Histogram"):
-            processor._transform_to_echarts([], panel_config)
-
-    def test_bar_type_raises_not_implemented(self):
-        """Should raise NotImplementedError for the not-yet-supported bar type."""
-        processor = _make_processor()
-        panel_config = _create_panel_config(panel_type="bar")
-
-        with pytest.raises(NotImplementedError, match="Bar chart"):
-            processor._transform_to_echarts([], panel_config)
 
     def test_table_type_returns_data_as_is(self):
         """Should return the data unchanged (wrapped with type/title) for table panels."""

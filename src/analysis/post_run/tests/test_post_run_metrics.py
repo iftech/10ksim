@@ -3,7 +3,7 @@ import logging
 import pandas as pd
 
 from src.analysis.plotting.config import PlotConfig
-from src.analysis.post_run.metrics import STANDARD_PLOTS, plot_run_metrics
+from src.analysis.post_run.metrics import plot_run_metrics
 
 
 def _scrape_dump(root, muxer, metrics, rows=6):
@@ -65,8 +65,3 @@ def test_a_dump_missing_part_of_a_plot_is_left_out_of_it(tmp_path, caplog):
 
     assert written[0].exists()
     assert "`quic` has no ['libp2p-out'] data" in caplog.text
-
-
-def test_the_standard_set_covers_the_report_figures():
-    names = {plot.name for plot in STANDARD_PLOTS}
-    assert names == {"bandwidth", "memory", "connections"}

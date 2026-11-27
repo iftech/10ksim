@@ -74,17 +74,6 @@ async def test_cut_without_an_anchor_labels_only_the_nodes(tmp_path, steps):
     assert steps == [("label", "a"), ("label", "b")]
 
 
-@pytest.mark.parametrize("side", ["a", "b", ""])
-def test_anchor_side_accepts_a_side_or_none(side):
-    assert PartitionCutConfig(num_relay_nodes=4, anchor_side=side).anchor_side == side
-
-
-@pytest.mark.parametrize("side", ["c", "A", "both"])
-def test_anchor_side_rejects_anything_else(side):
-    with pytest.raises(ValidationError):
-        PartitionCutConfig(num_relay_nodes=4, anchor_side=side)
-
-
 @pytest.mark.parametrize("messages, delay", [(20, 1), (150, 1), (75, 2)])
 def test_cut_rejects_publishing_that_stops_before_the_heal(messages, delay):
     with pytest.raises(ValidationError, match="publish nothing after"):

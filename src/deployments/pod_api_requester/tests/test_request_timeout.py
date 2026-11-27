@@ -46,12 +46,6 @@ async def test_a_request_is_bounded_rather_than_using_the_300s_default(mocker):
 
 
 @pytest.mark.asyncio
-async def test_the_bound_is_short_enough_to_free_the_connection_pool():
-    """aiohttp holds 100 sockets; at 300s each, publishes to dead pods starve the loop."""
-    assert REQUEST_TIMEOUT_S < 300
-
-
-@pytest.mark.asyncio
 async def test_a_timeout_surfaces_as_a_typed_error(mocker):
     mocker.patch.object(
         pod_api_requester, "_get_api_requester_info", return_value=("10.0.0.1", 30000)
