@@ -15,6 +15,9 @@ from src.analysis.mesh_analysis.readers.tracers.message_tracer import MessageTra
 
 logger = logging.getLogger(__name__)
 
+# (connect, read) seconds; read is the wait between bytes, not the whole query.
+TIMEOUT_S = (10, 600)
+
 
 class VictoriaReader(Reader):
     def __init__(
@@ -34,14 +37,16 @@ class VictoriaReader(Reader):
     def _fetch_data(self, url: str, headers: Dict, params: Dict, extra_fields: List[str]):
         logs = []
         logger.debug(f"Fetching {params}")
-        with requests.post(url=url, headers=headers, params=params, stream=True) as response:
+        with requests.post(
+            url=url, headers=headers, params=params, stream=True, timeout=TIMEOUT_S
+        ) as response:
+            response.raise_for_status()
             for line in response.iter_lines():
                 if line:
                     try:
                         parsed_object = json.loads(line)
                     except json.decoder.JSONDecodeError as e:
-                        logger.info(line)
-                        exit()
+                        raise ValueError(f"Non-JSON line from VictoriaLogs: {line}") from e
                     try:
                         logs.append(
                             (parsed_object["_msg"],) + tuple(parsed_object[k] for k in extra_fields)
@@ -117,6 +122,7 @@ class VictoriaReader(Reader):
             self._config_query["url"],
             headers=self._config_query["headers"],
             params=self._config_query["params"],
+            timeout=TIMEOUT_S,
         )
         if response.status_code != 200:
             logger.error(f"Request failed with status code: {response.status_code}")

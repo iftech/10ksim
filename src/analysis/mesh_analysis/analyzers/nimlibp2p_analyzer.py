@@ -354,8 +354,7 @@ class Nimlibp2pAnalyzer(Analyzer):
                     case Ok(location_path):
                         data[1].to_csv(location_path)
                     case Err(err):
-                        logger.error(err)
-                        exit(1)
+                        raise OSError(err)
 
         return MessageReliabilityResult(
             all_in_same_shard=not has_shard_violations,

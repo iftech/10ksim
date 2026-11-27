@@ -100,14 +100,9 @@ class Analyzer(BaseModel):
         return self
 
     def _set_up_paths(self):
-        try:
-            self._dump_analysis_path = (
-                Path(self.dump_analysis_dir) if self.dump_analysis_dir else None
-            )
-            result = path_utils.prepare_path_for_folder(self._dump_analysis_path)
-            if result.is_err():
-                logger.error(result.err_value)
-                exit(1)
-        except Exception as e:
-            full_trace = traceback.format_exc()
-            logger.error(f"Failure setting up paths. exception: {e}\n{full_trace}")
+        self._dump_analysis_path = Path(self.dump_analysis_dir) if self.dump_analysis_dir else None
+        if self._dump_analysis_path is None:
+            return
+        result = path_utils.prepare_path_for_folder(self._dump_analysis_path)
+        if result.is_err():
+            raise OSError(result.err_value)
