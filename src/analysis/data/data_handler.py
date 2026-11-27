@@ -18,8 +18,7 @@ class DataHandler:
     def dump_dataframe(self, dump_path: str):
         result = path_utils.prepare_path_for_file(dump_path)
         if result.is_err():
-            logger.error(f"{result.err_value}")
-            exit(1)
+            raise OSError(result.err_value)
 
         self._dataframe.to_csv(result.ok_value)
         logger.debug(f"{dump_path} data dumped")

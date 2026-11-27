@@ -259,10 +259,9 @@ def wait_for_cleanup(
             cleaned_up = poll_cleanup_status(resources, namespace, api_client)
         except ApiException as e:
             logger.warning(f"Error polling cleanup status: {e}")
-            time.sleep(polling_interval)
-            continue
-
-        logger.info(f"Cleanup status: {'complete' if cleaned_up else 'incomplete'}.")
+            cleaned_up = False
+        else:
+            logger.info(f"Cleanup status: {'complete' if cleaned_up else 'incomplete'}.")
 
         if cleaned_up:
             logger.info(f"All specified resources cleaned up in namespace `{namespace}`.")

@@ -186,3 +186,12 @@ class TestCleanupResources:
 
         apps_api.assert_not_called()
         core_api.assert_not_called()
+
+
+class TestWaitForCleanup:
+    def test_persistent_api_error_times_out(self, mocker):
+        mocker.patch.object(k8s_cleanup, "poll_cleanup_status", side_effect=ApiException(500))
+        mocker.patch.object(k8s_cleanup.time, "sleep")
+
+        with pytest.raises(TimeoutError):
+            k8s_cleanup.wait_for_cleanup({}, "ns", MagicMock(), timeout=-1)
